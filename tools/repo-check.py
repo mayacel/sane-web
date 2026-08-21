@@ -59,6 +59,9 @@ require(session_dir in installer,'installer no longer creates /usr/share/wayland
 require(session_file in installer,'installer no longer installs the Sane Wayland session entry')
 require(installer.find(session_dir) < installer.find(session_file),'Wayland session directory must be created before installing sane-dwl.desktop')
 
+uninstaller=(root/'uninstall.sh').read_text()
+require('sane-system-check' in uninstaller,'uninstaller no longer restores/removes sane-system-check')
+
 safety=(root/'tools/system-safety.sh').read_text()
 for needle,msg in (
     ('systemctl show-environment','host safety check no longer verifies systemd control'),
