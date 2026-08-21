@@ -13,7 +13,7 @@ for rel in (
     'config/dwlb/config.h','lib/semantic.py','lib/firefox_setup.py',
     'firefox/userChrome.css','firefox/userContent.css',
     'assets/wallpapers/sane-current.jpg','assets/wallpapers/garden-kitten.jpg',
-    'assets/wallpapers/clouds.jpg',
+    'assets/wallpapers/clouds.jpg','tools/system-safety.sh','bin/sane-system-check',
 ):
     require((root/rel).exists(),f'missing {rel}')
 
@@ -43,12 +43,36 @@ require('wlroots0.19 libinput' not in installer,'installer hardcodes a wlroots p
 require('wlroots0.20' in installer and 'wlroots0.19' in installer,'installer must support both current 0.20 and legacy 0.19 providers')
 require('SANE_WLROOTS_ABI' in installer,'installer no longer exports selected wlroots ABI')
 require('pkg-config --exists "wlroots-$WLR_ABI"' in installer,'installer no longer verifies the selected wlroots ABI')
-require('package preflight failed before making package changes' in installer,'installer package preflight missing')
+require('package preflight failed before rice package changes' in installer,'installer package preflight missing')
+require(re.search(r'^\s*sudo pacman -Sy\s*$',installer,re.M) is None,'installer must never run isolated pacman -Sy against the live database')
+require('sudo pacman -Syu' in installer,'installer no longer performs a complete rolling-release upgrade before new packages')
+require('bash "$ROOT/tools/system-safety.sh" preflight' in installer,'installer host preflight missing')
+require('bash "$ROOT/tools/system-safety.sh" post-upgrade' in installer,'installer post-upgrade host check missing')
+require('bash /usr/local/lib/sane-rice/system-safety.sh post-install' in installer,'installer final fatal host check missing')
+require('sudo install -m 0755 "$ROOT/tools/system-safety.sh" /usr/local/lib/sane-rice/system-safety.sh' in installer,'installer no longer installs the host safety checker')
+require('sudo systemctl enable sddm.service 2>/dev/null || true' not in installer,'installer must not hide systemctl enable failures')
+require('sudo systemctl enable sddm.service' in installer,'installer no longer enables SDDM on systemd')
+
 session_dir='sudo install -d -m 0755 /usr/share/wayland-sessions'
 session_file='sudo install -m 0644 "$ROOT/config/sane-dwl.desktop" /usr/share/wayland-sessions/sane-dwl.desktop'
 require(session_dir in installer,'installer no longer creates /usr/share/wayland-sessions on minimal systems')
 require(session_file in installer,'installer no longer installs the Sane Wayland session entry')
 require(installer.find(session_dir) < installer.find(session_file),'Wayland session directory must be created before installing sane-dwl.desktop')
+
+safety=(root/'tools/system-safety.sh').read_text()
+for needle,msg in (
+    ('systemctl show-environment','host safety check no longer verifies systemd control'),
+    ('/run/systemd/private','host safety check no longer verifies the systemd private socket'),
+    ('busctl --system','host safety check no longer verifies system D-Bus'),
+    ('XDG_RUNTIME_DIR','host safety check no longer verifies XDG_RUNTIME_DIR'),
+    ('ip -4 route show default','host safety check no longer verifies a default route'),
+    ('getent ahosts archlinux.org','host safety check no longer verifies DNS'),
+    ('/usr/lib/modules/$running','host safety check no longer verifies running kernel modules'),
+    ('findmnt --fstab','host safety check no longer verifies boot mounts from fstab'),
+    ('bootctl --print-esp-path','host safety check no longer verifies the systemd-boot ESP'),
+    ('pacman -Ql "$pkg"','host safety check no longer compares installed kernel payloads'),
+):
+    require(needle in safety,msg)
 
 builder=(root/'tools/build-components.sh').read_text()
 require('SANE_WLROOTS_ABI' in builder,'build helper lost selected wlroots ABI support')
@@ -63,6 +87,7 @@ require('sudo pacman -S --needed tllist' in builder,'build helper no longer self
 workflow=(root/'.github/workflows/validate.yml').read_text()
 require('fcft pixman tllist' in workflow,'Arch CI must install tllist with fcft/pixman')
 require('pkg-config --exists wayland-client wayland-cursor fcft pixman-1 tllist' in workflow,'Arch CI no longer verifies dwlb pkg-config closure')
+require('for f in tools/*.sh' in workflow,'CI no longer syntax-checks every shell tool, including system-safety.sh')
 
 semantic=(root/'lib/semantic.py').read_text()
 require('return hls_to_rgb(h,.90,s)' in semantic,'light surface regression')
