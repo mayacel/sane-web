@@ -70,7 +70,9 @@ for needle,msg in (
     ('/usr/lib/modules/$running','host safety check no longer verifies running kernel modules'),
     ('findmnt --fstab','host safety check no longer verifies boot mounts from fstab'),
     ('bootctl --print-esp-path','host safety check no longer verifies the systemd-boot ESP'),
-    ('pacman -Ql "$pkg"','host safety check no longer compares installed kernel payloads'),
+    ('pacman -Ql "$pkg"','host safety check no longer identifies the installed kernel module version'),
+    ('/usr/lib/modules/$modulever/vmlinuz','host safety check no longer verifies the canonical current-Arch kernel image'),
+    ('check_mkinitcpio_outputs','host safety check no longer verifies configured initramfs/UKI outputs'),
 ):
     require(needle in safety,msg)
 
