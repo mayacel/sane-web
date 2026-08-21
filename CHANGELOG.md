@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.4 — 2026-08-20
+
+- Fix step 4/12 failing after cloning dwlb with `fatal: unable to read tree`.
+- Replace the transient GitHub PR test-merge SHA `d1223810...` with the reachable upstream `main` commit `48dbe00b...`.
+- Verify the pinned dwlb commit and its complete tree before patching/building.
+- Add an explicit fetch fallback for a configured `SANE_DWLB_REF` when its commit is not already present in the normal clone.
+- Add repository invariants that reject the transient PR merge SHA in future releases.
+
 ## 1.0.3 — 2026-08-20
 
 - Fix fresh clones failing at step 4/12 with `tools/build-components.sh: Permission denied`.
