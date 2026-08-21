@@ -17,8 +17,6 @@ for rel in (
 ):
     require((root/rel).exists(),f'missing {rel}')
 
-# These files are invoked directly from a fresh clone. Their executable bits
-# are part of the repository contract, not a post-clone chmod workaround.
 for rel in ('install.sh','update.sh','uninstall.sh','tools/build-components.sh'):
     p=root/rel
     require(p.exists() and os.access(p, os.X_OK), f'{rel} is not executable in the checkout')
@@ -33,7 +31,6 @@ for legacy in ('SANE_APPS_POLISH_BEGIN','SANE_V6_FIREFOX_BEGIN','SANE_FIREFOX_NA
 require('ui.systemUsesDarkTheme' not in (root/'firefox/userChrome.css').read_text(),'ui.systemUsesDarkTheme unexpectedly in CSS')
 
 setup=(root/'lib/firefox_setup.py').read_text()
-# Mentioning the stale pref in cleanup code is correct; setting it is not.
 require('user_pref("ui.systemUsesDarkTheme"' not in setup,'firefox_setup.py must never set ui.systemUsesDarkTheme')
 
 dwl=(root/'config/dwl/config.h.in').read_text()
@@ -52,6 +49,9 @@ builder=(root/'tools/build-components.sh').read_text()
 require('SANE_WLROOTS_ABI' in builder,'build helper lost selected wlroots ABI support')
 require('checkout_first "$DWL" 0.9 v0.9' in builder,'build helper no longer selects dwl 0.9 for wlroots 0.20')
 require('checkout_first "$DWL" v0.8 0.8' in builder,'build helper no longer retains dwl 0.8 fallback')
+require('48dbe00bdb98a1ae6a0e60558ce14503616aa759' in builder,'dwlb must be pinned to the reachable upstream main commit')
+require('d1223810b275309d279070324740515a16f795f3' not in builder,'transient GitHub PR merge SHA must not be used as dwlb pin')
+require('checkout_exact "$DWLB" "$DWLB_PIN" dwlb' in builder,'dwlb pin must be verified as a complete checkout before patching')
 
 semantic=(root/'lib/semantic.py').read_text()
 require('return hls_to_rgb(h,.90,s)' in semantic,'light surface regression')
