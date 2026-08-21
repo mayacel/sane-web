@@ -1,5 +1,8 @@
 # Sane dwl rice
 
+<img width="1919" height="1079" alt="2026-08-20_17-53-50" src="https://github.com/user-attachments/assets/bcd71227-0f0e-4843-9293-970a03230b3c" />
+
+
 A complete Arch Linux / Artix Linux rice built around **dwl**, **dwlb**,
 **foot**, **wmenu**, **fnott** and a small set of direct desktop tools.
 
