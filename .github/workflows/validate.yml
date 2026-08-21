@@ -29,8 +29,12 @@ jobs:
           pacman -Syu --noconfirm
           pacman -S --noconfirm --needed \
             git python pkgconf wlroots0.20 libinput wayland wayland-protocols \
-            libxkbcommon libxcb xcb-util-wm xorg-xwayland fcft pixman
+            libxkbcommon libxcb xcb-util-wm xorg-xwayland fcft pixman tllist
       - uses: actions/checkout@v4
+      - name: Verify dwlb pkg-config dependency closure
+        run: |
+          pkg-config --exists wayland-client wayland-cursor fcft pixman-1 tllist
+          pkg-config --cflags wayland-client wayland-cursor fcft pixman-1 >/dev/null
       - name: Compile patched dwl 0.9 and dwlb
         env:
           SANE_BUILD_ONLY: "1"
