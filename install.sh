@@ -127,7 +127,7 @@ done
 say "2/12 — install Arch/Artix packages"
 
 # Refresh repository metadata before resolving distro/version-specific package
-# names.  This also makes failures deterministic instead of letting one missing
+# names. This also makes failures deterministic instead of letting one missing
 # target abort a long pacman command half-way through argument processing.
 if [ "$SANE_FULL_UPGRADE" = 1 ]; then
   sudo pacman -Sy
@@ -141,9 +141,10 @@ repo_pkg_version() {
 installed_pkg_version() {
   pacman -Q "$1" 2>/dev/null | awk '{print $2; exit}'
 }
-version_is_wlroots_019() {
-  case "$1" in
-    0.19*|1:0.19*) return 0 ;;
+version_is_wlroots_abi() {
+  local abi="$1" ver="$2"
+  case "$ver" in
+    "$abi"*|1:"$abi"*) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -165,26 +166,42 @@ else
   REQUIRED+=(dbus)
 fi
 
-# dwl v0.8 needs the pkg-config ABI name "wlroots-0.19".  Do not blindly
-# require one pacman package name: Arch/Artix snapshots and already-configured
-# systems may expose the same ABI through a different package or a local build.
+# Match dwl to the wlroots ABI actually available on the target system.
+# Current Arch ships wlroots0.20; older Arch/Artix snapshots may still expose
+# wlroots0.19. The build helper selects dwl 0.9 for ABI 0.20 and dwl 0.8 for
+# ABI 0.19, so rolling repository updates do not strand the installer.
+WLR_ABI=""
 WLR_PROVIDER=""
-WLR_ALREADY_READY=0
-if command -v pkg-config >/dev/null 2>&1 && pkg-config --exists wlroots-0.19; then
-  WLR_ALREADY_READY=1
-  WLR_PROVIDER="existing pkg-config wlroots-0.19 $(pkg-config --modversion wlroots-0.19)"
-else
-  for candidate in wlroots0.19 wlroots; do
+
+for abi in 0.20 0.19; do
+  if command -v pkg-config >/dev/null 2>&1 && pkg-config --exists "wlroots-$abi"; then
+    WLR_ABI="$abi"
+    WLR_PROVIDER="existing pkg-config wlroots-$abi $(pkg-config --modversion "wlroots-$abi")"
+    break
+  fi
+done
+
+if [ -z "$WLR_ABI" ]; then
+  for spec in \
+    "0.20:wlroots0.20" \
+    "0.19:wlroots0.19" \
+    "0.20:wlroots" \
+    "0.19:wlroots"
+  do
+    abi="${spec%%:*}"
+    candidate="${spec#*:}"
     if repo_has_pkg "$candidate"; then
       ver="$(repo_pkg_version "$candidate")"
-      if [ "$candidate" = wlroots0.19 ] || version_is_wlroots_019 "$ver"; then
+      if [ "$candidate" = "wlroots0.$(printf '%s' "$abi" | cut -d. -f2)" ] || version_is_wlroots_abi "$abi" "$ver"; then
         REQUIRED+=("$candidate")
+        WLR_ABI="$abi"
         WLR_PROVIDER="$candidate $ver (repository)"
         break
       fi
     elif installed_pkg "$candidate"; then
       ver="$(installed_pkg_version "$candidate")"
-      if [ "$candidate" = wlroots0.19 ] || version_is_wlroots_019 "$ver"; then
+      if [ "$candidate" = "wlroots0.$(printf '%s' "$abi" | cut -d. -f2)" ] || version_is_wlroots_abi "$abi" "$ver"; then
+        WLR_ABI="$abi"
         WLR_PROVIDER="$candidate $ver (already installed outside current repos)"
         break
       fi
@@ -192,10 +209,15 @@ else
   done
 fi
 
-if [ -z "$WLR_PROVIDER" ]; then
-  die "wlroots 0.19 was not found. Enable a repository that provides wlroots0.19 (Arch extra / Artix world), or install a compatible wlroots 0.19 build, then rerun."
+if [ -z "$WLR_ABI" ]; then
+  printf '\nNo supported wlroots ABI was found. Checked:\n' >&2
+  printf '  wlroots-0.20 / wlroots0.20 (dwl 0.9)\n' >&2
+  printf '  wlroots-0.19 / wlroots0.19 (dwl 0.8)\n' >&2
+  die "enable a repository with wlroots0.20 or wlroots0.19, then rerun"
 fi
+export SANE_WLROOTS_ABI="$WLR_ABI"
 printf 'wlroots provider: %s\n' "$WLR_PROVIDER"
+printf 'selected dwl line: %s\n' "$([ "$WLR_ABI" = 0.20 ] && printf '0.9' || printf '0.8')"
 
 # Optional quality-of-life packages: install only when present in enabled repos.
 OPTIONAL=(thunar-volman adwaita-cursors)
@@ -203,9 +225,9 @@ for pkg in "${OPTIONAL[@]}"; do
   if repo_has_pkg "$pkg"; then REQUIRED+=("$pkg"); fi
 done
 
-# Preflight every target.  If a package was installed locally/AUR and is no
-# longer visible in the enabled repositories, keep using it instead of passing
-# its name to pacman and triggering "target not found".
+# Preflight every target. If a package was installed locally/AUR and is no
+# longer visible in enabled repositories, keep using it instead of passing its
+# name to pacman and triggering "target not found".
 PACMAN_TARGETS=()
 MISSING=()
 for pkg in "${REQUIRED[@]}"; do
@@ -236,11 +258,11 @@ else
 fi
 xdg-user-dirs-update || true
 
-# The package name is not what matters to the dwl build; this ABI is.
-if ! pkg-config --exists wlroots-0.19; then
-  die "packages installed, but pkg-config cannot find wlroots-0.19; dwl v0.8 cannot be compiled safely"
+# The package name is not what matters to the dwl build; the selected ABI is.
+if ! pkg-config --exists "wlroots-$WLR_ABI"; then
+  die "packages installed, but pkg-config cannot find wlroots-$WLR_ABI"
 fi
-printf 'wlroots ABI ready: %s\n' "$(pkg-config --modversion wlroots-0.19)"
+printf 'wlroots ABI ready: %s (%s)\n' "$WLR_ABI" "$(pkg-config --modversion "wlroots-$WLR_ABI")"
 
 if [ "$DISTRO" = artix ] && [ "$INIT" = openrc ]; then
   sudo rc-update add dbus default 2>/dev/null || true
@@ -302,7 +324,6 @@ p.write_text(old.rstrip()+'\n\n'+block)
 PY
 
 say "7/12 — configure Thunar, image/video/PDF handlers"
-# Stop daemons before changing xfconf/XML and GTK startup styling.
 thunar -q 2>/dev/null || true
 pkill -x Thunar 2>/dev/null || true
 pkill -x xfconfd 2>/dev/null || true
@@ -327,7 +348,6 @@ for mime in video/mp4 video/x-matroska video/webm video/mpeg video/quicktime vid
 xdg-mime default org.pwmt.zathura.desktop application/pdf || true
 
 say "8/12 — initialize and configure Firefox"
-# Firefox profile locations differ across Linux builds. Create one if this is a fresh user.
 if ! find "$HOME/.config/mozilla/firefox" "$HOME/.mozilla/firefox" -type f -name prefs.js -print -quit 2>/dev/null | grep -q .; then
   TMP_SHOT="$HOME/.cache/sane-rice/firefox-init.png"
   mkdir -p "$(dirname "$TMP_SHOT")"
@@ -378,7 +398,6 @@ say "10/12 — generate initial palette and application chrome"
 sane-palette --no-live "$HOME/Pictures/wallpapers/sane-current.jpg"
 sane-app-theme --quiet || true
 
-# If Firefox profile appeared after palette setup, make sure canonical CSS is installed.
 if ! pgrep -x firefox >/dev/null 2>&1; then
   python3 /usr/local/lib/sane-rice/firefox_setup.py apply /usr/local/share/sane-rice/firefox || true
 fi
