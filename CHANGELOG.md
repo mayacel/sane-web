@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.0.7 — 2026-08-21
+
+- Remove the isolated live `pacman -Sy` refresh from the installer. The default rolling-release update now happens as a complete `pacman -Syu` transaction before rice package installation.
+- Add a fatal host preflight before package changes. On Arch it verifies systemd PID 1/control access, `/run/systemd/private`, system D-Bus, the real `XDG_RUNTIME_DIR`, network route/DNS, running-kernel modules and configured boot/EFI mounts.
+- Re-check the host immediately after the full system upgrade so a systemd/D-Bus/network regression stops the installer before desktop configuration continues.
+- Validate standard installed kernel payloads against `/usr/lib/modules` and `/boot/vmlinuz-*`, and verify a detected systemd-boot ESP is actually mounted.
+- Refuse `SANE_FULL_UPGRADE=0` when the currently synchronized pacman databases already report pending upgrades.
+- Stop hiding `systemctl enable sddm.service` failures; a broken system manager can no longer be silently treated as successful installation.
+- Add a final fatal host check before the installer prints `finished`.
+- Add the installed `sane-system-check` diagnostic command for repeating the host checks later.
+- Expand repository invariants and CI shell syntax checks so isolated `pacman -Sy`, hidden SDDM systemctl failures, or removal of the new safety checks are caught automatically.
+
 ## 1.0.6 — 2026-08-20
 
 - Fix step 9/12 failing on minimal Arch installations where `/usr/share/wayland-sessions` does not exist yet.
