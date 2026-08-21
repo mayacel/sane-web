@@ -28,6 +28,25 @@ checkout_first() {
   return 1
 }
 
+checkout_exact() {
+  local repo="$1" ref="$2" label="$3"
+
+  # Normal clones only contain commits reachable from advertised refs. A GitHub
+  # test-merge/PR commit may still be addressable through the API while its tree
+  # is absent from a normal clone, which makes `git checkout <sha>` fail with
+  # "unable to read tree". Prefer a commit reachable from the upstream main
+  # branch and verify that the complete commit object is actually present.
+  if ! git -C "$repo" cat-file -e "${ref}^{commit}" 2>/dev/null; then
+    echo "==> $label pin $ref is not present in the clone; fetching it explicitly"
+    git -C "$repo" fetch --no-tags origin "$ref" >/dev/null 2>&1 || return 1
+    ref=FETCH_HEAD
+  fi
+
+  git -C "$repo" cat-file -e "${ref}^{tree}" 2>/dev/null || return 1
+  git -C "$repo" checkout --detach "$ref" >/dev/null 2>&1 || return 1
+  echo "==> selected $label ref: $(git -C "$repo" rev-parse --short=12 HEAD)"
+}
+
 # Prefer the ABI chosen by install.sh. Build-only/CI use may call this helper
 # directly, so detect an installed ABI as a fallback.
 WLR_ABI="${SANE_WLROOTS_ABI:-}"
@@ -57,8 +76,6 @@ clone_repo "$DWL" \
   https://github.com/djpohly/dwl.git || { echo 'Could not clone dwl.' >&2; exit 1; }
 
 if [ "$WLR_ABI" = 0.20 ]; then
-  # dwl 0.9 is the stable line bumped for wlroots 0.20. The commit fallback is
-  # the upstream 0.9 bump and protects mirrors that omit branch refs.
   checkout_first "$DWL" 0.9 v0.9 2c9cb2af1b || {
     echo 'Could not find a dwl 0.9 ref compatible with wlroots 0.20.' >&2
     exit 1
@@ -72,22 +89,26 @@ fi
 
 sed "s/@KEYBOARD_LAYOUT@/${SANE_KEYBOARD_LAYOUT:-br}/g" "$ROOT/config/dwl/config.h.in" > "$DWL/config.h"
 
-# The selected dwl line should already use the matching pkg-config ABI. Make it
-# explicit so an unexpected mirror/ref fails deterministically instead of later.
 sed -i -E "s/wlroots-0\.(19|20)/wlroots-$WLR_ABI/g" "$DWL/config.mk"
 if ! grep -q "wlroots-$WLR_ABI" "$DWL/config.mk"; then
   echo "dwl config.mk does not reference wlroots-$WLR_ABI after checkout" >&2
   exit 1
 fi
 
-# Make's last assignment wins. Keep XWayland enabled without depending on the
-# exact comment placement used by either dwl 0.8 or 0.9.
 printf '\n# Sane rice: XWayland enabled\nXWAYLAND = -DXWAYLAND\nXLIBS = xcb xcb-icccm\n' >> "$DWL/config.mk"
 
-# Pin dwlb because patch_sources.py adds a runtime sane-theme command to its parser.
+# Pin dwlb to the current upstream main commit, not to a transient GitHub PR
+# test-merge SHA. d1223810... was such a test merge: GitHub's API could resolve
+# it, but a normal `git clone` did not contain its tree, causing fresh installs
+# to fail with "fatal: unable to read tree".
 DWLB="$BUILD_ROOT/dwlb"
+DWLB_PIN="${SANE_DWLB_REF:-48dbe00bdb98a1ae6a0e60558ce14503616aa759}"
 clone_repo "$DWLB" https://github.com/kolunmi/dwlb.git || { echo 'Could not clone dwlb.' >&2; exit 1; }
-git -C "$DWLB" checkout d1223810b275309d279070324740515a16f795f3
+checkout_exact "$DWLB" "$DWLB_PIN" dwlb || {
+  echo "Could not checkout complete dwlb source for $DWLB_PIN." >&2
+  echo 'Upstream may have rewritten history; update SANE_DWLB_REF/the repository pin.' >&2
+  exit 1
+}
 cp "$ROOT/config/dwlb/config.h" "$DWLB/config.h"
 
 python3 "$ROOT/tools/patch_sources.py" --dwl "$DWL" --dwlb "$DWLB"
