@@ -367,7 +367,6 @@ else
 fi
 
 say "9/12 — install Wayland session and configure display manager"
-sudo install -m 0644 "$ROOT/config/sane-dwl.desktop" /usr/share/wayland-sessions/sane-dwl.desktop
 
 have_dm=0
 for dm in sddm gdm lightdm greetd; do
@@ -388,6 +387,14 @@ if [ "$want_sddm" -eq 1 ]; then
     sudo pacman -S --needed sddm
   fi
 fi
+
+# Minimal Arch installations do not necessarily have this directory yet. A
+# display-manager package may create it, but the session is valid even when the
+# user intentionally installs with SANE_INSTALL_SDDM=no, so own the directory
+# creation explicitly instead of relying on another package's side effect.
+sudo install -d -m 0755 /usr/share/wayland-sessions
+sudo install -m 0644 "$ROOT/config/sane-dwl.desktop" /usr/share/wayland-sessions/sane-dwl.desktop
+sudo test -r /usr/share/wayland-sessions/sane-dwl.desktop || die "failed to install the Sane dwl Wayland session entry"
 
 if command -v sddm >/dev/null 2>&1; then
   if [ "$INIT" = openrc ]; then sudo rc-update add sddm default 2>/dev/null || true; fi
