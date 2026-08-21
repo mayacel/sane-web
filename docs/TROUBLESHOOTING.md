@@ -134,3 +134,21 @@ The session file should exist:
 ```bash
 cat /usr/share/wayland-sessions/sane-dwl.desktop
 ```
+## Installer says `target not found` / package preflight fails
+
+Version 1.0.1 preflights package names before the main transaction.  For dwl,
+the real requirement is `pkg-config --exists wlroots-0.19`; an existing
+compatible library is accepted even if the package name is not visible in the
+current mirror database.
+
+Check:
+
+```sh
+pkg-config --modversion wlroots-0.19
+pacman -Ss '^wlroots'
+```
+
+On Artix, make sure the official `system`, `world` and (for desktop extras)
+`galaxy` repositories are enabled. On Arch, `core` and `extra` should be
+enabled.
+

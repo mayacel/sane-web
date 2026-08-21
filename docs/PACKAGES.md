@@ -15,9 +15,16 @@ the rice.
 
 ### Build / Wayland
 
-`base-devel`, `git`, `pkgconf`, `python`, `rust`, `wlroots0.19`, `libinput`,
+`base-devel`, `git`, `pkgconf`, `python`, `rust`, `libinput`,
 `wayland`, `wayland-protocols`, `libxkbcommon`, `libxcb`, `xcb-util-wm`,
 `xorg-xwayland`, `fcft`, `pixman`.
+
+### wlroots 0.19 provider
+
+`dwl v0.8` links against the pkg-config ABI `wlroots-0.19`. The installer first
+uses an already available ABI, otherwise it resolves a repository provider
+(`wlroots0.19`, or `wlroots` only when that package is actually version 0.19).
+This avoids tying Arch/Artix support to one pacman package name.
 
 ### Shell
 

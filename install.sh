@@ -14,9 +14,23 @@ SANE_FULL_UPGRADE="${SANE_FULL_UPGRADE:-1}"
 SANE_WALLUST_VERSION="${SANE_WALLUST_VERSION:-3.5.2}"
 export SANE_KEYBOARD_LAYOUT
 
-say() { printf '\n\033[1m==> %s\033[0m\n' "$*"; }
+CURRENT_STEP="startup"
+
+say() {
+  CURRENT_STEP="$*"
+  printf '\n\033[1m==> %s\033[0m\n' "$*"
+}
 warn() { printf '\033[33mwarning:\033[0m %s\n' "$*" >&2; }
 die() { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
+
+on_error() {
+  local rc="$1" line="$2" cmd="$3"
+  printf '\n\033[31mINSTALLER FAILED\033[0m (exit %s)\n' "$rc" >&2
+  printf 'step: %s\nline: %s\ncommand: %s\n' "$CURRENT_STEP" "$line" "$cmd" >&2
+  printf 'backup: %s\n' "$BACKUP" >&2
+  printf 'Fix the reported cause and run ./install.sh again; reruns are supported.\n' >&2
+}
+trap 'rc=$?; on_error "$rc" "$LINENO" "$BASH_COMMAND"; exit "$rc"' ERR
 
 [ "$(id -u)" -ne 0 ] || die "run ./install.sh as your normal user, not as root"
 command -v pacman >/dev/null 2>&1 || die "pacman not found; this installer targets Arch Linux and Artix Linux"
@@ -111,9 +125,32 @@ for base in "$HOME/.config/mozilla/firefox" "$HOME/.mozilla/firefox"; do
 done
 
 say "2/12 — install Arch/Artix packages"
+
+# Refresh repository metadata before resolving distro/version-specific package
+# names.  This also makes failures deterministic instead of letting one missing
+# target abort a long pacman command half-way through argument processing.
+if [ "$SANE_FULL_UPGRADE" = 1 ]; then
+  sudo pacman -Sy
+fi
+
+repo_has_pkg() { pacman -Si "$1" >/dev/null 2>&1; }
+installed_pkg() { pacman -Q "$1" >/dev/null 2>&1; }
+repo_pkg_version() {
+  pacman -Si "$1" 2>/dev/null | awk -F ': +' '/^Version[[:space:]]*:/ {print $2; exit}'
+}
+installed_pkg_version() {
+  pacman -Q "$1" 2>/dev/null | awk '{print $2; exit}'
+}
+version_is_wlroots_019() {
+  case "$1" in
+    0.19*|1:0.19*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 REQUIRED=(
   base-devel git pkgconf python rust
-  wlroots0.19 libinput wayland wayland-protocols libxkbcommon libxcb xcb-util-wm xorg-xwayland
+  libinput wayland wayland-protocols libxkbcommon libxcb xcb-util-wm xorg-xwayland
   fcft pixman
   foot terminus-font wmenu fnott swaybg wlr-randr grim slurp wl-clipboard libnotify
   thunar tumbler ffmpegthumbnailer thunar-archive-plugin file-roller gvfs udisks2
@@ -128,19 +165,82 @@ else
   REQUIRED+=(dbus)
 fi
 
+# dwl v0.8 needs the pkg-config ABI name "wlroots-0.19".  Do not blindly
+# require one pacman package name: Arch/Artix snapshots and already-configured
+# systems may expose the same ABI through a different package or a local build.
+WLR_PROVIDER=""
+WLR_ALREADY_READY=0
+if command -v pkg-config >/dev/null 2>&1 && pkg-config --exists wlroots-0.19; then
+  WLR_ALREADY_READY=1
+  WLR_PROVIDER="existing pkg-config wlroots-0.19 $(pkg-config --modversion wlroots-0.19)"
+else
+  for candidate in wlroots0.19 wlroots; do
+    if repo_has_pkg "$candidate"; then
+      ver="$(repo_pkg_version "$candidate")"
+      if [ "$candidate" = wlroots0.19 ] || version_is_wlroots_019 "$ver"; then
+        REQUIRED+=("$candidate")
+        WLR_PROVIDER="$candidate $ver (repository)"
+        break
+      fi
+    elif installed_pkg "$candidate"; then
+      ver="$(installed_pkg_version "$candidate")"
+      if [ "$candidate" = wlroots0.19 ] || version_is_wlroots_019 "$ver"; then
+        WLR_PROVIDER="$candidate $ver (already installed outside current repos)"
+        break
+      fi
+    fi
+  done
+fi
+
+if [ -z "$WLR_PROVIDER" ]; then
+  die "wlroots 0.19 was not found. Enable a repository that provides wlroots0.19 (Arch extra / Artix world), or install a compatible wlroots 0.19 build, then rerun."
+fi
+printf 'wlroots provider: %s\n' "$WLR_PROVIDER"
+
 # Optional quality-of-life packages: install only when present in enabled repos.
 OPTIONAL=(thunar-volman adwaita-cursors)
 for pkg in "${OPTIONAL[@]}"; do
-  if pacman -Si "$pkg" >/dev/null 2>&1; then REQUIRED+=("$pkg"); fi
+  if repo_has_pkg "$pkg"; then REQUIRED+=("$pkg"); fi
 done
 
+# Preflight every target.  If a package was installed locally/AUR and is no
+# longer visible in the enabled repositories, keep using it instead of passing
+# its name to pacman and triggering "target not found".
+PACMAN_TARGETS=()
+MISSING=()
+for pkg in "${REQUIRED[@]}"; do
+  if repo_has_pkg "$pkg"; then
+    PACMAN_TARGETS+=("$pkg")
+  elif installed_pkg "$pkg"; then
+    warn "$pkg is installed but not present in enabled repositories; keeping the installed copy"
+  else
+    MISSING+=("$pkg")
+  fi
+done
+
+if [ "${#MISSING[@]}" -gt 0 ]; then
+  printf '\nMissing required packages in the enabled repositories:\n' >&2
+  printf '  %s\n' "${MISSING[@]}" >&2
+  if [ "$DISTRO" = artix ]; then
+    printf '\nArtix normally needs [system], [world] and [galaxy] enabled.\n' >&2
+  else
+    printf '\nArch normally needs [core] and [extra] enabled.\n' >&2
+  fi
+  die "package preflight failed before making package changes"
+fi
+
 if [ "$SANE_FULL_UPGRADE" = 1 ]; then
-  sudo pacman -Syu --needed "${REQUIRED[@]}"
+  sudo pacman -Syu --needed "${PACMAN_TARGETS[@]}"
 else
-  # Useful for repo development/update runs. A full -Syu is recommended on Arch.
-  sudo pacman -S --needed "${REQUIRED[@]}"
+  sudo pacman -S --needed "${PACMAN_TARGETS[@]}"
 fi
 xdg-user-dirs-update || true
+
+# The package name is not what matters to the dwl build; this ABI is.
+if ! pkg-config --exists wlroots-0.19; then
+  die "packages installed, but pkg-config cannot find wlroots-0.19; dwl v0.8 cannot be compiled safely"
+fi
+printf 'wlroots ABI ready: %s\n' "$(pkg-config --modversion wlroots-0.19)"
 
 if [ "$DISTRO" = artix ] && [ "$INIT" = openrc ]; then
   sudo rc-update add dbus default 2>/dev/null || true

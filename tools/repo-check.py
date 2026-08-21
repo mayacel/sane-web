@@ -35,6 +35,12 @@ require('@KEYBOARD_LAYOUT@' in dwl,'dwl config lost @KEYBOARD_LAYOUT@ placeholde
 require('TAGCOUNT (5)' in dwl,'dwl config is not the five-tag rice')
 require('&layouts[0]' in dwl,'dwl default layout no longer points to tile')
 
+
+installer=(root/'install.sh').read_text()
+require('wlroots0.19 libinput' not in installer,'installer hardcodes wlroots0.19 in REQUIRED again')
+require('pkg-config --exists wlroots-0.19' in installer,'installer no longer verifies wlroots 0.19 ABI')
+require('package preflight failed before making package changes' in installer,'installer package preflight missing')
+
 semantic=(root/'lib/semantic.py').read_text()
 require('return hls_to_rgb(h,.90,s)' in semantic,'light surface regression')
 require('return hls_to_rgb(h,.27,s)' in semantic,'dark tinted-surface regression')

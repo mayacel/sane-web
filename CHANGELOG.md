@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.1 — 2026-08-20
+
+- Fix installer aborting at package step when `wlroots0.19` is not a valid pacman target on the current repository snapshot but the `wlroots-0.19` ABI is already installed.
+- Resolve wlroots by ABI/provider instead of assuming one package name.
+- Add package preflight so missing targets are reported before the main pacman transaction.
+- Keep locally installed required packages when they are not visible in enabled repositories.
+- Verify `pkg-config wlroots-0.19` before compiling dwl v0.8.
+- Add an ERR report with failed step, line and command so installer failures no longer silently return to the shell.
+
 ## 1.0.0 — 2026-08-20
 
 First repository release of the consolidated rice.
