@@ -5,7 +5,7 @@
 - Remove the isolated live `pacman -Sy` refresh from the installer. The default rolling-release update now happens as a complete `pacman -Syu` transaction before rice package installation.
 - Add a fatal host preflight before package changes. On Arch it verifies systemd PID 1/control access, `/run/systemd/private`, system D-Bus, the real `XDG_RUNTIME_DIR`, network route/DNS, running-kernel modules and configured boot/EFI mounts.
 - Re-check the host immediately after the full system upgrade so a systemd/D-Bus/network regression stops the installer before desktop configuration continues.
-- Validate standard installed kernel payloads against `/usr/lib/modules` and `/boot/vmlinuz-*`, and verify a detected systemd-boot ESP is actually mounted.
+- Validate current Arch kernel package payloads through `/usr/lib/modules/<version>/vmlinuz`, compare traditional `/boot/vmlinuz-*` copies when present, verify configured mkinitcpio image/UKI outputs, and verify a detected systemd-boot ESP is actually mounted.
 - Refuse `SANE_FULL_UPGRADE=0` when the currently synchronized pacman databases already report pending upgrades.
 - Stop hiding `systemctl enable sddm.service` failures; a broken system manager can no longer be silently treated as successful installation.
 - Add a final fatal host check before the installer prints `finished`.
