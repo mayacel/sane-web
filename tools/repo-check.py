@@ -35,11 +35,17 @@ require('@KEYBOARD_LAYOUT@' in dwl,'dwl config lost @KEYBOARD_LAYOUT@ placeholde
 require('TAGCOUNT (5)' in dwl,'dwl config is not the five-tag rice')
 require('&layouts[0]' in dwl,'dwl default layout no longer points to tile')
 
-
 installer=(root/'install.sh').read_text()
-require('wlroots0.19 libinput' not in installer,'installer hardcodes wlroots0.19 in REQUIRED again')
-require('pkg-config --exists wlroots-0.19' in installer,'installer no longer verifies wlroots 0.19 ABI')
+require('wlroots0.19 libinput' not in installer,'installer hardcodes a wlroots provider in REQUIRED again')
+require('wlroots0.20' in installer and 'wlroots0.19' in installer,'installer must support both current 0.20 and legacy 0.19 providers')
+require('SANE_WLROOTS_ABI' in installer,'installer no longer exports selected wlroots ABI')
+require('pkg-config --exists "wlroots-$WLR_ABI"' in installer,'installer no longer verifies the selected wlroots ABI')
 require('package preflight failed before making package changes' in installer,'installer package preflight missing')
+
+builder=(root/'tools/build-components.sh').read_text()
+require('SANE_WLROOTS_ABI' in builder,'build helper lost selected wlroots ABI support')
+require('checkout_first "$DWL" 0.9 v0.9' in builder,'build helper no longer selects dwl 0.9 for wlroots 0.20')
+require('checkout_first "$DWL" v0.8 0.8' in builder,'build helper no longer retains dwl 0.8 fallback')
 
 semantic=(root/'lib/semantic.py').read_text()
 require('return hls_to_rgb(h,.90,s)' in semantic,'light surface regression')
