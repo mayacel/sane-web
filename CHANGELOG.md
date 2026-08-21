@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.2 — 2026-08-20
+
+- Support current Arch repositories where `wlroots0.20` replaces `wlroots0.19`.
+- Select the compositor line by installed ABI: dwl 0.9 for wlroots 0.20, dwl 0.8 for wlroots 0.19.
+- Prefer wlroots 0.20 while retaining Artix/older-snapshot wlroots 0.19 compatibility.
+- Pass the selected ABI to the source build and verify `config.mk` before compiling.
+- Add a current dwl GitHub mirror fallback while keeping the archived legacy mirror last.
+- Update CI to compile the current Arch/wlroots 0.20 path so repository drift is caught automatically.
+
 ## 1.0.1 — 2026-08-20
 
 - Fix installer aborting at package step when `wlroots0.19` is not a valid pacman target on the current repository snapshot but the `wlroots-0.19` ABI is already installed.
