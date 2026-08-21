@@ -52,6 +52,12 @@ require('checkout_first "$DWL" v0.8 0.8' in builder,'build helper no longer reta
 require('48dbe00bdb98a1ae6a0e60558ce14503616aa759' in builder,'dwlb must be pinned to the reachable upstream main commit')
 require('d1223810b275309d279070324740515a16f795f3' not in builder,'transient GitHub PR merge SHA must not be used as dwlb pin')
 require('checkout_exact "$DWLB" "$DWLB_PIN" dwlb' in builder,'dwlb pin must be verified as a complete checkout before patching')
+require('pkg-config --exists tllist' in builder,'build helper no longer preflights tllist')
+require('sudo pacman -S --needed tllist' in builder,'build helper no longer self-heals missing Arch tllist')
+
+workflow=(root/'.github/workflows/validate.yml').read_text()
+require('fcft pixman tllist' in workflow,'Arch CI must install tllist with fcft/pixman')
+require('pkg-config --exists wayland-client wayland-cursor fcft pixman-1 tllist' in workflow,'Arch CI no longer verifies dwlb pkg-config closure')
 
 semantic=(root/'lib/semantic.py').read_text()
 require('return hls_to_rgb(h,.90,s)' in semantic,'light surface regression')
