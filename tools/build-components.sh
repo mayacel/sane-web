@@ -31,11 +31,6 @@ checkout_first() {
 checkout_exact() {
   local repo="$1" ref="$2" label="$3"
 
-  # Normal clones only contain commits reachable from advertised refs. A GitHub
-  # test-merge/PR commit may still be addressable through the API while its tree
-  # is absent from a normal clone, which makes `git checkout <sha>` fail with
-  # "unable to read tree". Prefer a commit reachable from the upstream main
-  # branch and verify that the complete commit object is actually present.
   if ! git -C "$repo" cat-file -e "${ref}^{commit}" 2>/dev/null; then
     echo "==> $label pin $ref is not present in the clone; fetching it explicitly"
     git -C "$repo" fetch --no-tags origin "$ref" >/dev/null 2>&1 || return 1
@@ -47,8 +42,33 @@ checkout_exact() {
   echo "==> selected $label ref: $(git -C "$repo" rev-parse --short=12 HEAD)"
 }
 
-# Prefer the ABI chosen by install.sh. Build-only/CI use may call this helper
-# directly, so detect an installed ABI as a fallback.
+ensure_dwlb_build_deps() {
+  # Arch's fcft binary package does not pull its make-only dependency tllist.
+  # However fcft.pc references tllist, so `pkg-config --cflags fcft ...` fails
+  # completely on a fresh system without tllist. That in turn hides pixman's
+  # include flags and produces the misleading `pixman.h: No such file` error.
+  if ! pkg-config --exists tllist 2>/dev/null; then
+    echo '==> dwlb build dependency tllist is missing; installing it'
+    if command -v pacman >/dev/null 2>&1 && pacman -Si tllist >/dev/null 2>&1; then
+      sudo pacman -S --needed tllist
+    else
+      echo 'tllist.pc is required to compile dwlb through fcft, but package tllist is unavailable.' >&2
+      echo 'Enable the repository that provides tllist and rerun the installer.' >&2
+      exit 1
+    fi
+  fi
+
+  local pc
+  for pc in wayland-client wayland-cursor fcft pixman-1 tllist; do
+    if ! pkg-config --exists "$pc" 2>/dev/null; then
+      echo "Required dwlb pkg-config module is still missing: $pc" >&2
+      exit 1
+    fi
+  done
+
+  echo "==> dwlb pkg-config dependencies ready: $(pkg-config --modversion fcft) / pixman $(pkg-config --modversion pixman-1) / tllist $(pkg-config --modversion tllist)"
+}
+
 WLR_ABI="${SANE_WLROOTS_ABI:-}"
 if [ -z "$WLR_ABI" ]; then
   if pkg-config --exists wlroots-0.20 2>/dev/null; then WLR_ABI=0.20
@@ -97,10 +117,6 @@ fi
 
 printf '\n# Sane rice: XWayland enabled\nXWAYLAND = -DXWAYLAND\nXLIBS = xcb xcb-icccm\n' >> "$DWL/config.mk"
 
-# Pin dwlb to the current upstream main commit, not to a transient GitHub PR
-# test-merge SHA. d1223810... was such a test merge: GitHub's API could resolve
-# it, but a normal `git clone` did not contain its tree, causing fresh installs
-# to fail with "fatal: unable to read tree".
 DWLB="$BUILD_ROOT/dwlb"
 DWLB_PIN="${SANE_DWLB_REF:-48dbe00bdb98a1ae6a0e60558ce14503616aa759}"
 clone_repo "$DWLB" https://github.com/kolunmi/dwlb.git || { echo 'Could not clone dwlb.' >&2; exit 1; }
@@ -111,6 +127,7 @@ checkout_exact "$DWLB" "$DWLB_PIN" dwlb || {
 }
 cp "$ROOT/config/dwlb/config.h" "$DWLB/config.h"
 
+ensure_dwlb_build_deps
 python3 "$ROOT/tools/patch_sources.py" --dwl "$DWL" --dwlb "$DWLB"
 
 make -C "$DWL" clean >/dev/null 2>&1 || true
