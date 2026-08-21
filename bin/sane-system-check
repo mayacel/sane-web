@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+
+CHECK=/usr/local/lib/sane-rice/system-safety.sh
+if [ ! -r "$CHECK" ]; then
+    printf 'sane-system-check: %s is missing; reinstall Sane Web\n' "$CHECK" >&2
+    exit 1
+fi
+
+exec /bin/bash "$CHECK" manual
