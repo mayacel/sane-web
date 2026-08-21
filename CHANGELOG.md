@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.5 — 2026-08-20
+
+- Fix fresh Arch builds of dwlb failing with `Package tllist ... not found` followed by the misleading `pixman.h: No such file or directory` error.
+- Detect the missing `tllist.pc` build dependency before compiling dwlb and install the official `tllist` package automatically when available.
+- Verify the complete dwlb pkg-config dependency closure (`wayland-client`, `wayland-cursor`, `fcft`, `pixman-1`, `tllist`) before invoking `make`.
+- Update the Arch CI smoke build to install `tllist` and explicitly test the pkg-config closure so this fresh-install regression is caught automatically.
+
 ## 1.0.4 — 2026-08-20
 
 - Fix step 4/12 failing after cloning dwlb with `fatal: unable to read tree`.
