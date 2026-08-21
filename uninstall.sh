@@ -98,7 +98,7 @@ for path in \
 for name in \
   sane-app-theme sane-colors sane-doctor sane-firefox-status sane-firefox-sync \
   sane-help sane-image sane-image-status sane-image-theme sane-live-theme sane-menu sane-menu-text \
-  sane-mode sane-palette sane-shot-area sane-shot-full sane-thunar-icons sane-thunar-style sane-wallpaper
+  sane-mode sane-palette sane-shot-area sane-shot-full sane-system-check sane-thunar-icons sane-thunar-style sane-wallpaper
  do restore_root "/usr/local/bin/$name"; done
 
 echo '[4/4] finished'
