@@ -12,7 +12,8 @@ jobs:
       - name: Shell syntax
         run: |
           set -e
-          bash -n install.sh update.sh uninstall.sh tools/build-components.sh
+          bash -n install.sh update.sh uninstall.sh
+          for f in tools/*.sh; do bash -n "$f"; done
           for f in bin/*; do bash -n "$f"; done
           bash -n dotfiles/.config/dwl/start
       - name: Python syntax and repository invariants
