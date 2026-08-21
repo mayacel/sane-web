@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from pathlib import Path
-import hashlib, re, sys
+import hashlib, os, re, sys
 
 root=Path(__file__).resolve().parents[1]
 errors=[]
@@ -16,6 +16,12 @@ for rel in (
     'assets/wallpapers/clouds.jpg',
 ):
     require((root/rel).exists(),f'missing {rel}')
+
+# These files are invoked directly from a fresh clone. Their executable bits
+# are part of the repository contract, not a post-clone chmod workaround.
+for rel in ('install.sh','update.sh','uninstall.sh','tools/build-components.sh'):
+    p=root/rel
+    require(p.exists() and os.access(p, os.X_OK), f'{rel} is not executable in the checkout')
 
 ch=(root/'firefox/userChrome.css').read_text(errors='ignore')
 ct=(root/'firefox/userContent.css').read_text(errors='ignore')
