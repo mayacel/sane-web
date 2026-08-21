@@ -44,6 +44,11 @@ require('wlroots0.20' in installer and 'wlroots0.19' in installer,'installer mus
 require('SANE_WLROOTS_ABI' in installer,'installer no longer exports selected wlroots ABI')
 require('pkg-config --exists "wlroots-$WLR_ABI"' in installer,'installer no longer verifies the selected wlroots ABI')
 require('package preflight failed before making package changes' in installer,'installer package preflight missing')
+session_dir='sudo install -d -m 0755 /usr/share/wayland-sessions'
+session_file='sudo install -m 0644 "$ROOT/config/sane-dwl.desktop" /usr/share/wayland-sessions/sane-dwl.desktop'
+require(session_dir in installer,'installer no longer creates /usr/share/wayland-sessions on minimal systems')
+require(session_file in installer,'installer no longer installs the Sane Wayland session entry')
+require(installer.find(session_dir) < installer.find(session_file),'Wayland session directory must be created before installing sane-dwl.desktop')
 
 builder=(root/'tools/build-components.sh').read_text()
 require('SANE_WLROOTS_ABI' in builder,'build helper lost selected wlroots ABI support')
