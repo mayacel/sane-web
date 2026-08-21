@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+f="$HOME/.config/sane/colors.env"
+[ -r "$f" ] || { echo 'No palette generated yet.' >&2; exit 1; }
+cat "$f"

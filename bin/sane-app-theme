@@ -1,0 +1,59 @@
+#!/bin/sh
+set -eu
+QUIET=0; [ "${1:-}" = '--quiet' ] && QUIET=1
+COLORS="$HOME/.config/sane/colors.env"
+[ -r "$COLORS" ] || exit 1
+. "$COLORS"
+mkdir -p "$HOME/.config/mpv" "$HOME/.config/zathura" "$HOME/Pictures/Screenshots"
+
+sane-firefox-sync --quiet || true
+sane-thunar-style --quiet || true
+sane-thunar-icons || true
+sane-image-theme --quiet || true
+
+cat > "$HOME/.config/zathura/zathurarc" <<EOF
+set font "Terminus 10"
+set guioptions "s"
+set adjust-open "width"
+set statusbar-h-padding 4
+set statusbar-v-padding 1
+set default-bg "#$SURFACE"
+set default-fg "#$TEXT"
+set statusbar-bg "#$SURFACE"
+set statusbar-fg "#$TEXT"
+set inputbar-bg "#$SURFACE"
+set inputbar-fg "#$TEXT"
+set completion-bg "#$SURFACE"
+set completion-fg "#$TEXT"
+set completion-group-bg "#$SURFACE_ALT"
+set completion-group-fg "#$MUTED"
+set completion-highlight-bg "#$SELECT"
+set completion-highlight-fg "#$SELECT_TEXT"
+set notification-warning-bg "#$URGENT"
+set notification-warning-fg "#$URGENT_TEXT"
+set notification-error-bg "#$URGENT"
+set notification-error-fg "#$URGENT_TEXT"
+set recolor false
+EOF
+
+python3 - "$HOME/.config/mpv/mpv.conf" "$TEXT" "$SURFACE" "$ACTIVE" <<'PY'
+from pathlib import Path
+import re,sys
+p=Path(sys.argv[1]); text,surface,active=sys.argv[2:]
+b='# SANE_MPV_BEGIN'; e='# SANE_MPV_END'
+old=p.read_text(errors='ignore') if p.exists() else ''
+old=re.sub(re.escape(b)+r'.*?'+re.escape(e)+r'\n?','',old,flags=re.S)
+block=(f'{b}\n'
+       'osd-font=Terminus\n'
+       'osd-font-size=24\n'
+       f'osd-color=#{text}\n'
+       f'osd-outline-color=#{surface}\n'
+       f'osd-selected-color=#{active}\n'
+       f'osd-selected-outline-color=#{surface}\n'
+       f'{e}\n')
+p.parent.mkdir(parents=True,exist_ok=True)
+p.write_text(old.rstrip()+'\n\n'+block)
+PY
+rm -f "$HOME/.config/mpv/sane-colors.conf"
+
+[ "$QUIET" -eq 1 ] || echo "Sane application chrome regenerated ($MODE)."

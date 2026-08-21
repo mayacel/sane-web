@@ -1,0 +1,10 @@
+#!/bin/sh
+set -u
+echo 'Firefox / Sane bridge'
+echo '---------------------'
+if [ -r "$HOME/.config/sane/colors.env" ]; then . "$HOME/.config/sane/colors.env"; echo "mode: $MODE  surface:#$SURFACE  active:#$ACTIVE"; fi
+printf 'gtk-theme: '; gsettings get org.gnome.desktop.interface gtk-theme 2>/dev/null || true
+printf 'icon-theme: '; gsettings get org.gnome.desktop.interface icon-theme 2>/dev/null || true
+printf 'scheme: '; gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null || true
+printf 'portal: '; gdbus call --session --dest org.freedesktop.portal.Desktop --object-path /org/freedesktop/portal/desktop --method org.freedesktop.portal.Settings.Read org.freedesktop.appearance color-scheme 2>/dev/null || true
+python3 /usr/local/lib/sane-rice/firefox_setup.py status /usr/local/share/sane-rice/firefox 2>/dev/null || true

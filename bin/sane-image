@@ -1,0 +1,16 @@
+#!/bin/sh
+set -eu
+if [ "${1:-}" = "--self-test" ]; then
+  command -v imv >/dev/null
+  command -v imv-dir >/dev/null
+  imv -v
+  exit 0
+fi
+/usr/local/bin/sane-image-theme --quiet || true
+if [ "$#" -eq 0 ]; then
+  exec /usr/bin/imv
+elif [ "$#" -eq 1 ] && [ -f "$1" ]; then
+  exec /usr/bin/imv-dir "$1"
+else
+  exec /usr/bin/imv "$@"
+fi

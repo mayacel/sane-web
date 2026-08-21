@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+COLORS="$HOME/.config/sane/colors.env"
+if [ -r "$COLORS" ]; then . "$COLORS"; else
+    SURFACE=f2ead7 TEXT=303229 ACTIVE=6f8448 ACTIVE_TEXT=fffaf0
+fi
+exec wmenu-run -i -f 'Terminus 11' -p 'run:' \
+    -N "$SURFACE" -n "$TEXT" \
+    -M "$SURFACE" -m "$ACTIVE" \
+    -S "$ACTIVE" -s "$ACTIVE_TEXT"

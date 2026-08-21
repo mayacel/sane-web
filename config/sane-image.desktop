@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Image
+GenericName=Image Viewer
+Comment=Direct image viewer
+Exec=/usr/local/bin/sane-image %F
+Terminal=false
+Icon=image-x-generic
+Categories=Graphics;Viewer;
+MimeType=image/png;image/jpeg;image/gif;image/webp;image/bmp;image/tiff;image/svg+xml;image/heif;image/heic;image/avif;image/jxl;image/x-portable-pixmap;image/x-portable-graymap;image/x-portable-bitmap;
+StartupNotify=false

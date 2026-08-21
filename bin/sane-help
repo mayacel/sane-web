@@ -1,0 +1,25 @@
+#!/bin/sh
+cat <<'EOF' | sane-menu-text
+Sane dwl keys
+Super+Enter       terminal
+Super+D           launcher
+Super+E           files
+Super+B           browser
+Super+C           close window
+Super+V           toggle floating
+Super+F           fullscreen
+Super+A           toggle bar
+Super+W           wallpaper + palette
+Super+N           dismiss notification
+Print             area screenshot
+Super+Shift+S     area screenshot
+Super+Shift+Print full screenshot
+Super+T           tiled layout
+Super+Shift+V     floating layout
+Super+M           monocle
+Super+J/K         next/previous window
+Super+H/L         master width
+Super+1..5        tags
+Super+Shift+1..5  move window to tag
+Super+Shift+Q     quit dwl
+EOF

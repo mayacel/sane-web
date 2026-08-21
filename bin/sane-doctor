@@ -1,0 +1,20 @@
+#!/bin/sh
+set -u
+fail=0
+check(){ if command -v "$1" >/dev/null 2>&1; then printf '[ok]   %-22s %s\n' "$1" "$(command -v "$1")"; else printf '[MISS] %-22s\n' "$1"; fail=1; fi; }
+echo 'Sane dwl rice doctor'
+echo '--------------------'
+for x in dwl dwlb foot wmenu wmenu-run fnott fnottctl swaybg wallust thunar firefox imv imv-dir mpv zathura grim slurp wl-copy wlr-randr; do check "$x"; done
+echo
+printf 'mode: '; cat "$HOME/.config/sane/mode" 2>/dev/null || echo missing
+printf 'wallpaper: '; cat "$HOME/.config/dwl/wallpaper" 2>/dev/null || echo default
+printf 'palette: '; [ -s "$HOME/.config/sane/colors.env" ] && echo yes || { echo no; fail=1; }
+printf 'dwl session: '; [ -x /usr/local/bin/dwl-session ] && echo yes || { echo no; fail=1; }
+printf 'wayland desktop: '; [ -f /usr/share/wayland-sessions/sane-dwl.desktop ] && echo yes || { echo no; fail=1; }
+echo
+if command -v gsettings >/dev/null 2>&1; then
+  printf 'gtk-theme: '; gsettings get org.gnome.desktop.interface gtk-theme 2>/dev/null || true
+  printf 'icon-theme: '; gsettings get org.gnome.desktop.interface icon-theme 2>/dev/null || true
+  printf 'color-scheme: '; gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null || true
+fi
+exit "$fail"

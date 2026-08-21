@@ -1,0 +1,16 @@
+#!/bin/sh
+set -u
+echo "Sane image viewer"
+echo "-----------------"
+printf 'imv          : '
+if command -v imv >/dev/null 2>&1; then imv -v 2>&1 | head -n1; else echo MISSING; fi
+printf 'imv-dir      : '
+command -v imv-dir 2>/dev/null || echo MISSING
+printf 'desktop file : '
+[ -f "$HOME/.local/share/applications/sane-image.desktop" ] && echo yes || echo NO
+printf 'config       : '
+[ -f "$HOME/.config/imv/config" ] && echo yes || echo NO
+echo
+for mime in image/png image/jpeg image/webp image/gif image/svg+xml; do
+  printf '%-16s %s\n' "$mime" "$(xdg-mime query default "$mime" 2>/dev/null || true)"
+done

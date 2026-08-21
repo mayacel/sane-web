@@ -1,0 +1,38 @@
+name: validate
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Shell syntax
+        run: |
+          set -e
+          bash -n install.sh update.sh uninstall.sh tools/build-components.sh
+          for f in bin/*; do bash -n "$f"; done
+          bash -n dotfiles/.config/dwl/start
+      - name: Python syntax and repository invariants
+        run: |
+          python3 -m py_compile lib/*.py tools/*.py
+          python3 tools/repo-check.py
+
+  arch-build-smoke:
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    steps:
+      - name: Install git + build dependencies
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm --needed \
+            git python pkgconf wlroots0.19 libinput wayland wayland-protocols \
+            libxkbcommon libxcb xcb-util-wm xorg-xwayland fcft pixman
+      - uses: actions/checkout@v4
+      - name: Compile patched dwl and dwlb
+        env:
+          SANE_BUILD_ONLY: "1"
+          SANE_KEYBOARD_LAYOUT: "br"
+        run: ./tools/build-components.sh "$GITHUB_WORKSPACE"

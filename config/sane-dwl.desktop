@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Sane dwl
+Comment=Sane Web dwl session
+Exec=/usr/local/bin/dwl-session
+Type=Application
+DesktopNames=dwl

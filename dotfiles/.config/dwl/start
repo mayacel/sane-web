@@ -1,0 +1,85 @@
+#!/bin/sh
+set -u
+
+mkdir -p "$HOME/.local/state/dwl"
+LOG="$HOME/.local/state/dwl/start.log"
+printf '%s\n' "----- dwl start $(date) -----" >> "$LOG"
+
+[ -n "${XDG_RUNTIME_DIR:-}" ] && : > "$XDG_RUNTIME_DIR/sane-dwl-runtime-theme"
+
+dbus-update-activation-environment \
+    WAYLAND_DISPLAY XDG_SESSION_TYPE XDG_CURRENT_DESKTOP XDG_SESSION_DESKTOP \
+    MOZ_ENABLE_WAYLAND PATH >> "$LOG" 2>&1 || true
+
+# On non-systemd user sessions (notably Artix/OpenRC), make sure the portal can
+# still be activated. D-Bus activation remains the first choice.
+if command -v gdbus >/dev/null 2>&1; then
+    if ! gdbus call --session --dest org.freedesktop.portal.Desktop \
+        --object-path /org/freedesktop/portal/desktop \
+        --method org.freedesktop.portal.Settings.Read \
+        org.freedesktop.appearance color-scheme >/dev/null 2>&1; then
+        [ -x /usr/lib/xdg-desktop-portal ] && /usr/lib/xdg-desktop-portal <&- >>"$LOG" 2>&1 &
+        [ -x /usr/lib/xdg-desktop-portal-gtk ] && /usr/lib/xdg-desktop-portal-gtk <&- >>"$LOG" 2>&1 &
+        sleep 1
+    fi
+fi
+
+WALLPAPER="$HOME/Pictures/wallpapers/sane-current.jpg"
+if [ -s "$HOME/.config/dwl/wallpaper" ]; then
+    saved="$(cat "$HOME/.config/dwl/wallpaper")"
+    [ -f "$saved" ] && WALLPAPER="$saved"
+fi
+
+if [ -f "$WALLPAPER" ] && command -v sane-palette >/dev/null 2>&1; then
+    sane-palette --no-live "$WALLPAPER" </dev/null >> "$LOG" 2>&1 || true
+fi
+
+if [ -r "$HOME/.config/sane/colors.env" ]; then
+    . "$HOME/.config/sane/colors.env"
+else
+    SURFACE=f2ead7 TEXT=303229 MUTED=66665d ACTIVE=6f8448 ACTIVE_TEXT=fffaf0 URGENT=b56745 URGENT_TEXT=fffaf0
+fi
+
+if [ -f "$WALLPAPER" ]; then
+    swaybg -i "$WALLPAPER" -m fill <&- >> "$LOG" 2>&1 &
+fi
+
+if command -v fnott >/dev/null 2>&1; then
+    ( exec <&-; sleep 1; fnott -s >> "$LOG" 2>&1 ) &
+fi
+
+if [ -x /usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1 ]; then
+    /usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1 <&- >> "$LOG" 2>&1 &
+elif [ -x /usr/lib/polkit-kde-authentication-agent-1 ]; then
+    /usr/lib/polkit-kde-authentication-agent-1 <&- >> "$LOG" 2>&1 &
+fi
+
+# Optional output settings. Example:
+#   wlr-randr --output eDP-1 --mode 1920x1080@60Hz --scale 1
+if [ -x "$HOME/.config/dwl/output.sh" ]; then
+    ( exec <&-; sleep 1; "$HOME/.config/dwl/output.sh" >> "$LOG" 2>&1 ) &
+fi
+
+# Small status clock; dwlb consumes dwl's stdin as the actual state stream.
+(
+    exec <&-
+    sleep 1
+    while pgrep -x dwlb >/dev/null 2>&1; do
+        /usr/local/bin/dwlb -status all "$(date '+%H:%M')" 2>/dev/null || true
+        sleep 20
+    done
+) &
+
+exec /usr/local/bin/dwlb -no-ipc \
+    -font 'Terminus:size=11' \
+    -vertical-padding 1 \
+    -active-fg-color "${ACTIVE_TEXT}ff" \
+    -active-bg-color "${ACTIVE}ff" \
+    -occupied-fg-color "${ACTIVE}ff" \
+    -occupied-bg-color "${SURFACE}ff" \
+    -inactive-fg-color "${MUTED}ff" \
+    -inactive-bg-color "${SURFACE}ff" \
+    -urgent-fg-color "${URGENT_TEXT}ff" \
+    -urgent-bg-color "${URGENT}ff" \
+    -middle-bg-color "${SURFACE}ff" \
+    -middle-bg-color-selected "${SURFACE}ff"

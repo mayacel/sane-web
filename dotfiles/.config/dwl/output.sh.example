@@ -1,0 +1,7 @@
+#!/bin/sh
+# Optional per-machine output configuration.
+# Copy this file to ~/.config/dwl/output.sh and make it executable.
+# First inspect outputs with: wlr-randr
+#
+# Example:
+# wlr-randr --output eDP-1 --mode 1920x1080@60Hz --scale 1

@@ -1,0 +1,57 @@
+#!/bin/sh
+set -eu
+
+RESTART_FNOTT=1
+if [ "${1:-}" = "--no-fnott" ]; then
+    RESTART_FNOTT=0
+fi
+
+COLORS="$HOME/.config/sane/colors.env"
+[ -r "$COLORS" ] || exit 0
+# shellcheck disable=SC1090
+. "$COLORS"
+
+# dwl: only signal a session that has declared the runtime patch active.
+# This avoids SIGUSR1 terminating the old compositor between install and first restart.
+if [ -n "${XDG_RUNTIME_DIR:-}" ] && [ -e "$XDG_RUNTIME_DIR/sane-dwl-runtime-theme" ]; then
+    pkill -USR1 -x dwl 2>/dev/null || true
+fi
+
+# dwlb: send a direct command to every running dwlb control socket.
+# The bar patch understands one semantic-theme message; no compositor IPC patch is required.
+/usr/bin/python3 - \
+    "${ACTIVE_TEXT}ff" "${ACTIVE}ff" \
+    "${ACTIVE}ff" "${SURFACE}ff" \
+    "${MUTED}ff" "${SURFACE}ff" \
+    "${URGENT_TEXT}ff" "${URGENT}ff" \
+    "${SURFACE}ff" "${SURFACE}ff" <<'PY'
+import os, socket, sys
+runtime = os.environ.get("XDG_RUNTIME_DIR")
+if not runtime:
+    raise SystemExit(0)
+dirpath = os.path.join(runtime, "dwlb")
+if not os.path.isdir(dirpath):
+    raise SystemExit(0)
+colors = sys.argv[1:]
+msg = ("all sane-theme " + " ".join(colors)).encode()
+for name in os.listdir(dirpath):
+    if not name.startswith("dwlb-"):
+        continue
+    path = os.path.join(dirpath, name)
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        s.settimeout(0.4)
+        s.connect(path)
+        s.sendall(msg)
+    except OSError:
+        pass
+    finally:
+        s.close()
+PY
+
+# fnott reads one small generated config. Restarting it is cheap and explicit.
+if [ "$RESTART_FNOTT" -eq 1 ] && [ -n "${WAYLAND_DISPLAY:-}" ] && command -v fnott >/dev/null 2>&1; then
+    pkill -x fnott 2>/dev/null || true
+    mkdir -p "$HOME/.local/state/dwl"
+    nohup fnott -s </dev/null >>"$HOME/.local/state/dwl/start.log" 2>&1 &
+fi

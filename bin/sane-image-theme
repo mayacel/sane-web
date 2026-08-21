@@ -1,0 +1,21 @@
+#!/bin/sh
+set -eu
+QUIET=0; [ "${1:-}" = '--quiet' ] && QUIET=1
+SURFACE=202020 TEXT=e8e8e8
+[ -r "$HOME/.config/sane/colors.env" ] && . "$HOME/.config/sane/colors.env"
+mkdir -p "$HOME/.config/imv"
+cat > "$HOME/.config/imv/config" <<EOF
+[options]
+background = $SURFACE
+fullscreen = false
+scaling_mode = shrink
+upscaling_method = linear
+overlay = false
+overlay_font = Terminus:12
+overlay_text_color = $TEXT
+overlay_background_color = $SURFACE
+overlay_background_alpha = e8
+title_text = \$imv_current_file
+loop_input = true
+EOF
+[ "$QUIET" -eq 1 ] || echo "imv theme regenerated: #$SURFACE"

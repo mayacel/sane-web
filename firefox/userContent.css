@@ -1,0 +1,16 @@
+/* SANE_FIREFOX_CANONICAL_NEWTAB_BEGIN */
+@-moz-document url("about:newtab"), url("about:home") {
+  :root,body {
+    color: CanvasText !important;
+    background: Canvas !important;
+    font-family: Terminus, monospace !important;
+    color-scheme: light dark !important;
+  }
+  .logo-and-wordmark,.weather,.top-sites-list,.sections-list,.discovery-stream,
+  .search-wrapper,.personalizeButtonWrapper,.personalize-button,.personalizeButton,
+  .wallpaper-attribution,.topic-selection-container,.widgets-container {
+    display: none !important;
+  }
+  .outer-wrapper { padding: 0 !important; }
+}
+/* SANE_FIREFOX_CANONICAL_NEWTAB_END */

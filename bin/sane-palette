@@ -1,0 +1,30 @@
+#!/bin/sh
+set -eu
+LIVE=1
+if [ "${1:-}" = "--no-live" ]; then LIVE=0; shift; fi
+IMAGE="${1:-}"
+if [ -z "$IMAGE" ]; then
+    if [ -s "$HOME/.config/dwl/wallpaper" ]; then IMAGE="$(cat "$HOME/.config/dwl/wallpaper")"; else IMAGE="$HOME/Pictures/wallpapers/sane-current.jpg"; fi
+fi
+[ -f "$IMAGE" ] || { printf 'sane-palette: wallpaper not found: %s\n' "$IMAGE" >&2; exit 1; }
+mkdir -p "$HOME/.config/sane" "$HOME/.config/wallust/templates" "$HOME/.cache/sane"
+MODE=light
+[ -s "$HOME/.config/sane/mode" ] && MODE="$(cat "$HOME/.config/sane/mode")"
+case "$MODE" in light) PALETTE=softlight16;; dark) PALETTE=softdark16;; *) MODE=light; PALETTE=softlight16;; esac
+cat > "$HOME/.config/wallust/wallust.toml" <<EOF
+backend = "fastresize"
+color_space = "labmixed"
+palette = "$PALETTE"
+check_contrast = true
+saturation = 48
+
+[templates]
+sane_raw = { template = "sane-raw", target = "~/.cache/sane/wallust.env" }
+EOF
+WALLUST="$(command -v wallust || true)"
+[ -n "$WALLUST" ] || { echo 'sane-palette: wallust not installed' >&2; exit 1; }
+"$WALLUST" --skip-sequences run "$IMAGE"
+[ -s "$HOME/.cache/sane/wallust.env" ] || { echo 'sane-palette: wallust template failed' >&2; exit 1; }
+/usr/bin/python3 /usr/local/lib/sane-rice/semantic.py "$HOME/.cache/sane/wallust.env"
+/usr/local/bin/sane-app-theme --quiet || true
+[ "$LIVE" -eq 0 ] || /usr/local/bin/sane-live-theme

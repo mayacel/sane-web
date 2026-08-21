@@ -1,0 +1,16 @@
+#!/bin/sh
+set -eu
+DIR="$HOME/Pictures/wallpapers"
+STATE="$HOME/.config/dwl/wallpaper"
+COLORS="$HOME/.config/sane/colors.env"
+mkdir -p "$DIR" "$(dirname "$STATE")"
+if [ -r "$COLORS" ]; then . "$COLORS"; else SURFACE=f2ead7 TEXT=303229 ACTIVE=6f8448 ACTIVE_TEXT=fffaf0; fi
+choice="$({ find "$DIR" -maxdepth 1 -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.webp' \) -printf '%f\n' 2>/dev/null || true; } | sort | \
+    wmenu -i -f 'Terminus 11' -p 'wallpaper:' -N "$SURFACE" -n "$TEXT" -M "$SURFACE" -m "$ACTIVE" -S "$ACTIVE" -s "$ACTIVE_TEXT")"
+[ -n "$choice" ] || exit 0
+file="$DIR/$choice"
+printf '%s\n' "$file" > "$STATE"
+pkill -x swaybg 2>/dev/null || true
+nohup swaybg -i "$file" -m fill >/dev/null 2>&1 &
+sane-palette "$file"
+notify-send 'Wallpaper' "$choice — palette updated" 2>/dev/null || true

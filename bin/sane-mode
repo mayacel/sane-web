@@ -1,0 +1,9 @@
+#!/bin/sh
+set -eu
+case "${1:-}" in light|dark) mode=$1;; *) echo 'usage: sane-mode light|dark' >&2; exit 2;; esac
+mkdir -p "$HOME/.config/sane"
+printf '%s\n' "$mode" > "$HOME/.config/sane/mode"
+wp="$HOME/Pictures/wallpapers/sane-current.jpg"
+[ -s "$HOME/.config/dwl/wallpaper" ] && wp="$(cat "$HOME/.config/dwl/wallpaper")"
+sane-palette "$wp"
+notify-send 'Theme' "$mode palette" 2>/dev/null || true

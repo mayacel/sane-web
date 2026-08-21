@@ -1,0 +1,5 @@
+# Optional per-machine environment loaded by /usr/local/bin/dwl-session.
+# Keep machine-specific workarounds here instead of editing the repository.
+#
+# export WLR_RENDERER=vulkan
+# export XCURSOR_SIZE=24

@@ -1,0 +1,230 @@
+#!/bin/sh
+set -eu
+QUIET=0
+[ "${1:-}" = "--quiet" ] && QUIET=1
+
+COLORS="$HOME/.config/sane/colors.env"
+[ -r "$COLORS" ] || { echo "sane-thunar-style: missing $COLORS" >&2; exit 1; }
+. "$COLORS"
+
+GTKCSS="$HOME/.config/gtk-3.0/gtk.css"
+mkdir -p "$(dirname "$GTKCSS")"
+
+/usr/bin/python3 - "$GTKCSS" "$SURFACE" "$SURFACE_ALT" "$TEXT" "$MUTED" "$BORDER" "$ACTIVE" "$SELECT" "$SELECT_TEXT" <<'PY'
+from pathlib import Path
+import re, sys
+
+p=Path(sys.argv[1])
+surface,surface_alt,text,muted,border,active,select,select_text=sys.argv[2:]
+
+begin="/* SANE_V6_THUNAR_BEGIN */"
+end="/* SANE_V6_THUNAR_END */"
+old=p.read_text(errors="ignore") if p.exists() else ""
+old=re.sub(re.escape(begin)+r".*?"+re.escape(end)+r"\n?", "", old, flags=re.S)
+
+block=f'''{begin}
+/* Thunar / Sane V6 compact file view. */
+
+.thunar {{
+  font-family: Terminus, monospace;
+  font-size: 12px;
+  font-weight: normal;
+  color: #{text};
+  background: #{surface};
+}}
+
+/* Filesystem objects should remain recognizable on pale surfaces.
+   Prefer regular/full-color theme icons in the file list and sidebar only;
+   toolbar actions keep their restrained symbolic form. */
+.thunar treeview.view,
+.thunar iconview,
+.thunar .sidebar .view,
+.thunar placessidebar {{
+  -gtk-icon-style: regular;
+}}
+
+.thunar menubar,
+.thunar menubar menuitem {{
+  font-weight: normal;
+  color: #{text};
+  background: #{surface};
+  background-image: none;
+  border-radius: 0;
+  box-shadow: none;
+}}
+
+.thunar menubar {{
+  border-bottom: 1px solid #{border};
+  padding: 0;
+}}
+
+.thunar menubar > menuitem {{
+  padding: 2px 5px;
+}}
+
+.thunar menubar > menuitem:hover {{
+  background: #{surface_alt};
+}}
+
+.thunar toolbar,
+.thunar .primary-toolbar {{
+  color: #{text};
+  background: #{surface};
+  background-image: none;
+  border: 0;
+  border-bottom: 1px solid #{border};
+  border-radius: 0;
+  box-shadow: none;
+  padding: 1px 2px;
+}}
+
+.thunar toolbar button,
+.thunar .primary-toolbar button {{
+  min-width: 20px;
+  min-height: 20px;
+  padding: 1px 3px;
+  color: #{text};
+  background: transparent;
+  background-image: none;
+  border: 1px solid transparent;
+  border-radius: 0;
+  box-shadow: none;
+}}
+
+.thunar toolbar button:hover,
+.thunar .primary-toolbar button:hover {{
+  background: #{surface_alt};
+  border-color: #{border};
+}}
+
+.thunar toolbar entry,
+.thunar .primary-toolbar entry {{
+  min-height: 20px;
+  padding: 1px 5px;
+  color: #{text};
+  caret-color: #{active};
+  background: #{surface};
+  background-image: none;
+  border: 1px solid #{border};
+  border-radius: 0;
+  box-shadow: none;
+}}
+
+.thunar toolbar entry:focus,
+.thunar .primary-toolbar entry:focus {{
+  border-color: #{active};
+}}
+
+.thunar .view,
+.thunar treeview,
+.thunar iconview {{
+  font-weight: normal;
+  color: #{text};
+  background: #{surface};
+}}
+
+.thunar treeview.view {{
+  -GtkTreeView-vertical-separator: 0;
+  -GtkTreeView-horizontal-separator: 2;
+}}
+
+.thunar .view:selected,
+.thunar treeview:selected,
+.thunar iconview:selected {{
+  color: #{select_text};
+  background: #{select};
+}}
+
+.thunar treeview header button {{
+  min-height: 19px;
+  padding: 1px 5px;
+  font-weight: normal;
+  color: #{muted};
+  background: #{surface_alt};
+  background-image: none;
+  border: 0;
+  border-right: 1px solid #{border};
+  border-bottom: 1px solid #{border};
+  border-radius: 0;
+  box-shadow: none;
+}}
+
+.thunar treeview header button:hover {{
+  color: #{text};
+  background: #{surface_alt};
+}}
+
+.thunar .sidebar,
+.thunar placessidebar {{
+  font-weight: normal;
+  color: #{muted};
+  background: #{surface_alt};
+}}
+
+.thunar .sidebar *,
+.thunar placessidebar * {{
+  font-weight: normal;
+}}
+
+.thunar .sidebar row:selected,
+.thunar placessidebar row:selected {{
+  color: #{text};
+  background: #{select};
+  box-shadow: inset 2px 0 #{active};
+}}
+
+.thunar scrollbar,
+.thunar scrollbar trough {{
+  background: #{surface};
+  border: 0;
+  border-radius: 0;
+}}
+
+.thunar scrollbar slider {{
+  min-width: 5px;
+  min-height: 5px;
+  background: #{border};
+  border: 0;
+  border-radius: 0;
+}}
+
+.thunar separator {{
+  min-width: 1px;
+  min-height: 1px;
+  background: #{border};
+}}
+
+.thunar statusbar {{
+  min-height: 18px;
+  padding: 1px 5px;
+  font-weight: normal;
+  color: #{muted};
+  background: #{surface};
+  border-top: 1px solid #{border};
+}}
+
+.thunar menu,
+.thunar menuitem {{
+  font-weight: normal;
+  color: #{text};
+  background: #{surface};
+  border-radius: 0;
+  box-shadow: none;
+}}
+
+.thunar menuitem {{
+  padding: 2px 6px;
+}}
+
+.thunar menuitem:hover {{
+  color: #{text};
+  background: #{select};
+}}
+{end}
+'''
+
+p.parent.mkdir(parents=True,exist_ok=True)
+p.write_text(old.rstrip()+"\n\n"+block+"\n")
+PY
+
+[ "$QUIET" -eq 1 ] || echo "Thunar Sane V6 compact style regenerated."

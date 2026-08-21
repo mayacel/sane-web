@@ -1,0 +1,56 @@
+#!/bin/sh
+set -eu
+COLORS="$HOME/.config/sane/colors.env"
+[ -r "$COLORS" ] || exit 0
+. "$COLORS"
+
+case "${MODE:-light}" in
+  dark)
+    if [ -f /usr/share/icons/breeze-dark/index.theme ]; then ICON_THEME=breeze-dark
+    elif [ -f /usr/share/icons/breeze/index.theme ]; then ICON_THEME=breeze
+    else ICON_THEME=Adwaita; fi
+    ;;
+  *)
+    if [ -f /usr/share/icons/breeze/index.theme ]; then ICON_THEME=breeze
+    else ICON_THEME=Adwaita; fi
+    ;;
+esac
+
+gsettings set org.gnome.desktop.interface icon-theme "$ICON_THEME" >/dev/null 2>&1 || true
+
+GTKCSS="$HOME/.config/gtk-3.0/gtk.css"
+mkdir -p "$(dirname "$GTKCSS")"
+python3 - "$GTKCSS" "$TEXT" "$MUTED" "$ACTIVE_TEXT" <<'PY'
+from pathlib import Path
+import re,sys
+p=Path(sys.argv[1]); text,muted,active_text=sys.argv[2:]
+begin="/* SANE_THUNAR_SIDEBAR_ICONS_BEGIN */"
+end="/* SANE_THUNAR_SIDEBAR_ICONS_END */"
+old=p.read_text(errors="ignore") if p.exists() else ""
+old=re.sub(re.escape(begin)+r".*?"+re.escape(end)+r"\n?","",old,flags=re.S)
+block=f'''{begin}
+.thunar .sidebar,
+.thunar placessidebar,
+.thunar treeview.sidebar {{
+  color: #{text};
+}}
+.thunar .sidebar image,
+.thunar placessidebar image,
+.thunar treeview.sidebar image {{
+  color: #{text};
+  -gtk-icon-shadow: none;
+  -gtk-icon-style: regular;
+}}
+.thunar .sidebar .dim-label,
+.thunar placessidebar .dim-label {{
+  color: #{muted};
+}}
+.thunar .sidebar row:selected image,
+.thunar placessidebar row:selected image,
+.thunar treeview.sidebar:selected image {{
+  color: #{active_text};
+}}
+{end}
+'''
+p.write_text(old.rstrip()+"\n\n"+block+"\n")
+PY

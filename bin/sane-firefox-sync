@@ -1,0 +1,103 @@
+#!/bin/sh
+set -eu
+QUIET=0
+[ "${1:-}" = "--quiet" ] && QUIET=1
+COLORS="$HOME/.config/sane/colors.env"
+[ -r "$COLORS" ] || { echo "sane-firefox-sync: missing $COLORS" >&2; exit 1; }
+. "$COLORS"
+
+CACHE="$HOME/.cache/sane"
+THEMES="$HOME/.local/share/themes"
+mkdir -p "$CACHE" "$THEMES" "$HOME/.config/gtk-3.0"
+
+SLOT=A
+[ -s "$CACHE/firefox-native-slot" ] && [ "$(cat "$CACHE/firefox-native-slot")" = A ] && SLOT=B
+printf '%s\n' "$SLOT" > "$CACHE/firefox-native-slot"
+THEME="SaneLive$SLOT"
+DIR="$THEMES/$THEME/gtk-3.0"
+mkdir -p "$DIR"
+
+case "$MODE" in
+  dark)
+    IMPORT='resource:///org/gtk/libgtk/theme/Adwaita/gtk-contained-dark.css'
+    COLOR_SCHEME='prefer-dark'
+    PREFER_DARK=1
+    if [ -f /usr/share/icons/breeze-dark/index.theme ]; then ICON_THEME='breeze-dark'
+    elif [ -f /usr/share/icons/breeze/index.theme ]; then ICON_THEME='breeze'
+    else ICON_THEME='Adwaita'; fi
+    ;;
+  *)
+    IMPORT='resource:///org/gtk/libgtk/theme/Adwaita/gtk-contained.css'
+    COLOR_SCHEME='prefer-light'
+    PREFER_DARK=0
+    if [ -f /usr/share/icons/breeze/index.theme ]; then ICON_THEME='breeze'
+    else ICON_THEME='Adwaita'; fi
+    ;;
+esac
+
+cat > "$DIR/gtk.css" <<EOF
+@import url("$IMPORT");
+@define-color theme_bg_color #$SURFACE;
+@define-color theme_fg_color #$TEXT;
+@define-color theme_base_color #$SURFACE;
+@define-color theme_text_color #$TEXT;
+@define-color theme_unfocused_bg_color #$SURFACE;
+@define-color theme_unfocused_fg_color #$MUTED;
+@define-color selected_bg_color #$ACTIVE;
+@define-color selected_fg_color #$ACTIVE_TEXT;
+@define-color theme_selected_bg_color #$ACTIVE;
+@define-color theme_selected_fg_color #$ACTIVE_TEXT;
+@define-color accent_bg_color #$ACTIVE;
+@define-color accent_fg_color #$ACTIVE_TEXT;
+@define-color insensitive_bg_color #$SURFACE_ALT;
+@define-color insensitive_fg_color #$MUTED;
+@define-color borders #$BORDER;
+@define-color unfocused_borders #$BORDER;
+window,.background { color:#$TEXT; background-color:#$SURFACE; }
+entry,textview text { color:#$TEXT; background-color:#$SURFACE_ALT; }
+selection,*:selected { color:#$ACTIVE_TEXT; background-color:#$ACTIVE; }
+EOF
+
+cat > "$THEMES/$THEME/index.theme" <<EOF
+[Desktop Entry]
+Type=X-GNOME-Metatheme
+Name=$THEME
+[X-GNOME-Metatheme]
+GtkTheme=$THEME
+IconTheme=$ICON_THEME
+EOF
+
+python3 - "$HOME/.config/gtk-3.0/settings.ini" "$THEME" "$PREFER_DARK" "$ICON_THEME" <<'PY'
+from pathlib import Path
+import configparser,io,sys
+p=Path(sys.argv[1]); theme=sys.argv[2]; dark=sys.argv[3]; icons=sys.argv[4]
+cp=configparser.ConfigParser(); cp.optionxform=str
+if p.exists():
+    try: cp.read(p)
+    except Exception: pass
+if not cp.has_section("Settings"): cp.add_section("Settings")
+cp.set("Settings","gtk-theme-name",theme)
+cp.set("Settings","gtk-icon-theme-name",icons)
+cp.set("Settings","gtk-application-prefer-dark-theme",dark)
+buf=io.StringIO(); cp.write(buf); p.write_text(buf.getvalue())
+PY
+
+gdbus call --session --dest org.freedesktop.portal.Desktop \
+  --object-path /org/freedesktop/portal/desktop \
+  --method org.freedesktop.portal.Settings.Read \
+  org.freedesktop.appearance color-scheme >/dev/null 2>&1 || true
+
+gsettings set org.gnome.desktop.interface icon-theme "$ICON_THEME" >/dev/null 2>&1 || true
+gsettings set org.gnome.desktop.interface color-scheme "$COLOR_SCHEME" >/dev/null 2>&1 || true
+gsettings set org.gnome.desktop.interface gtk-theme "$THEME" >/dev/null 2>&1 || true
+
+
+[ "$QUIET" -eq 1 ] || {
+  echo "Firefox native theme synchronized."
+  echo "  mode       : $MODE"
+  echo "  gtk theme  : $THEME"
+  echo "  surface    : #$SURFACE"
+  echo "  text       : #$TEXT"
+  echo "  active     : #$ACTIVE"
+  echo "  icon theme : $ICON_THEME"
+}
