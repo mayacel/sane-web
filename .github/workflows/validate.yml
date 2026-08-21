@@ -24,15 +24,16 @@ jobs:
     runs-on: ubuntu-latest
     container: archlinux:base-devel
     steps:
-      - name: Install git + build dependencies
+      - name: Install current Arch build dependencies
         run: |
           pacman -Syu --noconfirm
           pacman -S --noconfirm --needed \
-            git python pkgconf wlroots0.19 libinput wayland wayland-protocols \
+            git python pkgconf wlroots0.20 libinput wayland wayland-protocols \
             libxkbcommon libxcb xcb-util-wm xorg-xwayland fcft pixman
       - uses: actions/checkout@v4
-      - name: Compile patched dwl and dwlb
+      - name: Compile patched dwl 0.9 and dwlb
         env:
           SANE_BUILD_ONLY: "1"
           SANE_KEYBOARD_LAYOUT: "br"
+          SANE_WLROOTS_ABI: "0.20"
         run: ./tools/build-components.sh "$GITHUB_WORKSPACE"
