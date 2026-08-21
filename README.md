@@ -12,8 +12,8 @@ palette setup, application integration, Firefox cleanup, MIME defaults and
 login-session setup.
 
 ```bash
-git clone https://github.com/YOUR-USER/sane-dwl-rice.git
-cd sane-dwl-rice
+git clone https://github.com/mayacel/sane-web.git
+cd sane-web
 ./install.sh
 ```
 
