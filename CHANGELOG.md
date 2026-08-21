@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.6 — 2026-08-20
+
+- Fix step 9/12 failing on minimal Arch installations where `/usr/share/wayland-sessions` does not exist yet.
+- Resolve display-manager installation first, then explicitly create `/usr/share/wayland-sessions` before installing `sane-dwl.desktop`.
+- Keep the session-entry installation valid even when `SANE_INSTALL_SDDM=no` and no display manager package is present to create the directory as a side effect.
+- Verify that the installed Wayland session file is readable before continuing.
+
 ## 1.0.5 — 2026-08-20
 
 - Fix fresh Arch builds of dwlb failing with `Package tllist ... not found` followed by the misleading `pixman.h: No such file or directory` error.
