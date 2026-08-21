@@ -2,7 +2,6 @@
 
 <img width="1919" height="1079" alt="2026-08-20_17-53-50" src="https://github.com/user-attachments/assets/bcd71227-0f0e-4843-9293-970a03230b3c" />
 
-
 A complete Arch Linux / Artix Linux rice built around **dwl**, **dwlb**,
 **foot**, **wmenu**, **fnott** and a small set of direct desktop tools.
 
@@ -23,7 +22,8 @@ The installer must be run as a normal user with `sudo` access.
 
 ### Shell / compositor
 
-- dwl v0.8, compiled from source with XWayland enabled.
+- dwl 0.9 on current wlroots 0.20 systems, with a dwl 0.8 / wlroots 0.19
+  compatibility path for older Arch/Artix snapshots.
 - dwlb, compiled from a pinned upstream revision and patched for live colors.
 - 5 tags; tiled is the default layout; floating and monocle remain functional
   tools rather than aesthetic defaults.
@@ -93,6 +93,42 @@ left/right keys can browse sibling images in the same directory.
 - video -> mpv
 - PDF -> zathura + mupdf backend
 
+## Host safety in 1.0.7
+
+The installer now treats the operating system as something it must protect, not
+just a place to copy dotfiles.
+
+Before changing packages it verifies, where applicable:
+
+- Arch really has systemd as PID 1 and `systemctl` can talk to it;
+- `/run/systemd/private` and the system D-Bus are usable;
+- the login session has a real, user-owned `XDG_RUNTIME_DIR`;
+- at least one default route exists and DNS can resolve `archlinux.org`;
+- the running kernel still has its matching `/usr/lib/modules/<kernel>` tree;
+- `/boot`, `/efi` and `/boot/efi` entries declared in `/etc/fstab` are actually
+  mounted at those exact mount points;
+- a detected systemd-boot installation has a mounted ESP.
+
+Package database refresh is no longer performed with an isolated `pacman -Sy`.
+With the default `SANE_FULL_UPGRADE=1`, the rolling-release refresh and upgrade
+happen together as `pacman -Syu`; immediately afterwards the installer checks
+systemd, D-Bus, networking and the installed kernel/boot payload before moving
+on to rice packages.
+
+The final host check is fatal. The installer will not print `finished` if the
+system manager, D-Bus, network route/DNS, kernel payload or configured boot
+mounts are unhealthy. `systemctl enable sddm.service` failures are no longer
+hidden.
+
+After installation the same diagnostic can be run manually:
+
+```bash
+sane-system-check
+```
+
+This checker diagnoses and stops on unsafe host state; it intentionally does not
+invent an `XDG_RUNTIME_DIR`, rewrite DNS, or otherwise mask a broken system.
+
 ## Default keys
 
 | Key | Action |
@@ -134,7 +170,9 @@ Useful options:
 - `SANE_MODE=light|dark` — initial mode.
 - `SANE_INSTALL_SDDM=auto|yes|no` — by default SDDM is installed only when no
   known display manager exists.
-- `SANE_FULL_UPGRADE=1|0` — default `1`; performs `pacman -Syu` before install.
+- `SANE_FULL_UPGRADE=1|0` — default `1`. `1` performs a complete `pacman -Syu`
+  before rice packages. `0` is only a development/rerun escape hatch and is
+  rejected when the currently synchronized databases show pending upgrades.
 - `SANE_BUILD_ROOT=...` — source/build directory.
 - `SANE_JOBS=...` — parallel build jobs.
 
@@ -142,11 +180,14 @@ Useful options:
 
 The installer detects `/etc/os-release` and the init system.
 
-- Arch/systemd: normal package install and optional SDDM service enable.
+- Arch/systemd: host safety checks, safe rolling-release update, normal package
+  install and optional SDDM service enable.
 - Artix/OpenRC: installs/enables the OpenRC dbus/elogind services and uses
   `sddm-openrc` when it needs to install SDDM.
 
-It does not require systemd user services for the rice itself.
+The rice itself does not require systemd user services. On Arch, however, a
+healthy systemd/logind/PAM login path is required because Wayland sessions rely
+on the real per-user runtime directory.
 
 ## Updating
 
@@ -154,8 +195,8 @@ It does not require systemd user services for the rice itself.
 ./update.sh
 ```
 
-This creates another backup, updates packages by default, refreshes source,
-recompiles dwl/dwlb and reapplies the repository state.
+This creates another backup, runs the same safe installer path, refreshes
+sources, recompiles dwl/dwlb and reapplies the repository state.
 
 ## Uninstall / restore
 
@@ -170,6 +211,7 @@ left installed deliberately, and display-manager services are not disabled.
 
 ```bash
 sane-doctor
+sane-system-check
 sane-firefox-status
 sane-image-status
 ```
@@ -193,7 +235,7 @@ config/dwlb/                  dwlb build-time configuration
 dotfiles/.config/             user configuration copied to ~/.config
 firefox/                      canonical Firefox CSS
 lib/                          semantic palette / app configuration logic
-tools/                        source patches and build helper
+tools/                        build helpers, source patches and host safety checks
 docs/                         architecture, customization, troubleshooting
 .github/workflows/            repository validation/smoke build
 ```
