@@ -28,7 +28,7 @@ on_error() {
   printf '\n\033[31mINSTALLER FAILED\033[0m (exit %s)\n' "$rc" >&2
   printf 'step: %s\nline: %s\ncommand: %s\n' "$CURRENT_STEP" "$line" "$cmd" >&2
   printf 'backup: %s\n' "$BACKUP" >&2
-  printf 'Fix the reported cause and run ./install.sh again; reruns are supported.\n' >&2
+  printf 'The installer stopped instead of hiding the failure. Fix the reported cause and rerun ./install.sh.\n' >&2
 }
 trap 'rc=$?; on_error "$rc" "$LINENO" "$BASH_COMMAND"; exit "$rc"' ERR
 
@@ -36,6 +36,7 @@ trap 'rc=$?; on_error "$rc" "$LINENO" "$BASH_COMMAND"; exit "$rc"' ERR
 command -v pacman >/dev/null 2>&1 || die "pacman not found; this installer targets Arch Linux and Artix Linux"
 command -v sudo >/dev/null 2>&1 || die "sudo is required"
 [ -r /etc/os-release ] || die "/etc/os-release is missing"
+[ -r "$ROOT/tools/system-safety.sh" ] || die "tools/system-safety.sh is missing from this checkout"
 # shellcheck disable=SC1091
 . /etc/os-release
 
@@ -60,6 +61,7 @@ if [ "$DISTRO" = artix ] && [ "$INIT" != openrc ]; then
 fi
 
 case "$SANE_MODE" in light|dark) ;; *) die "SANE_MODE must be light or dark" ;; esac
+case "$SANE_FULL_UPGRADE" in 0|1) ;; *) die "SANE_FULL_UPGRADE must be 0 or 1" ;; esac
 
 mkdir -p "$BACKUP/home" "$BACKUP/root" "$STATE"
 printf '%s\n' "$BACKUP" > "$STATE/last-backup"
@@ -86,8 +88,12 @@ backup_root() {
 }
 
 say "Sane dwl rice $VERSION — $DISTRO / $INIT"
-printf 'user: %s\nkeyboard: %s\ninitial mode: %s\nbackup: %s\n' "$USER" "$SANE_KEYBOARD_LAYOUT" "$SANE_MODE" "$BACKUP"
+printf 'user: %s\nkeyboard: %s\ninitial mode: %s\nbackup: %s\n' \
+  "$USER" "$SANE_KEYBOARD_LAYOUT" "$SANE_MODE" "$BACKUP"
 sudo -v
+
+say "0/12 — host safety preflight"
+bash "$ROOT/tools/system-safety.sh" preflight
 
 say "1/12 — backup current configuration"
 for rel in \
@@ -95,21 +101,20 @@ for rel in \
   .config/gtk-3.0 .config/imv .config/zathura .config/mpv .config/mimeapps.list \
   .local/share/applications/sane-image.desktop .local/share/themes/SaneLiveA .local/share/themes/SaneLiveB \
   Pictures/wallpapers/sane-current.jpg Pictures/wallpapers/garden-kitten.jpg Pictures/wallpapers/clouds.jpg .bashrc
- do
+do
   backup_home "$rel"
 done
 for path in \
   /usr/local/bin/dwl /usr/local/bin/dwlb /usr/local/bin/dwl-session \
   /usr/local/lib/sane-rice /usr/local/share/sane-rice /usr/local/bin/wallust \
   /usr/share/wayland-sessions/sane-dwl.desktop
- do
+do
   backup_root "$path"
 done
 for f in "$ROOT"/bin/*; do
   backup_root "/usr/local/bin/$(basename "$f")"
 done
 
-# Firefox config is user data; back up only the files this rice edits, not the whole profile.
 mkdir -p "$BACKUP/firefox"
 for base in "$HOME/.config/mozilla/firefox" "$HOME/.mozilla/firefox"; do
   [ -d "$base" ] || continue
@@ -124,13 +129,23 @@ for base in "$HOME/.config/mozilla/firefox" "$HOME/.mozilla/firefox"; do
     -print0 2>/dev/null)
 done
 
-say "2/12 — install Arch/Artix packages"
+say "2/12 — safe system update and package install"
 
-# Refresh repository metadata before resolving distro/version-specific package
-# names. This also makes failures deterministic instead of letting one missing
-# target abort a long pacman command half-way through argument processing.
+# Never run an isolated `pacman -Sy`: it refreshes the live sync databases
+# without completing the upgrade and can leave an Arch/Artix system exposed to
+# partial-upgrade mistakes. Refresh + upgrade is one transaction here.
 if [ "$SANE_FULL_UPGRADE" = 1 ]; then
-  sudo pacman -Sy
+  printf 'Performing the required rolling-release system upgrade before installing rice packages.\n'
+  sudo pacman -Syu
+  bash "$ROOT/tools/system-safety.sh" post-upgrade
+else
+  # Development/rerun escape hatch. Refuse when the currently synchronized
+  # databases already show pending upgrades; installing packages in that state
+  # would be a partial upgrade.
+  if pacman -Qu 2>/dev/null | grep -q .; then
+    die "SANE_FULL_UPGRADE=0 requested while upgrades are pending; rerun with SANE_FULL_UPGRADE=1"
+  fi
+  warn "SANE_FULL_UPGRADE=0: using the existing synchronized package databases without refreshing them"
 fi
 
 repo_has_pkg() { pacman -Si "$1" >/dev/null 2>&1; }
@@ -166,10 +181,6 @@ else
   REQUIRED+=(dbus)
 fi
 
-# Match dwl to the wlroots ABI actually available on the target system.
-# Current Arch ships wlroots0.20; older Arch/Artix snapshots may still expose
-# wlroots0.19. The build helper selects dwl 0.9 for ABI 0.20 and dwl 0.8 for
-# ABI 0.19, so rolling repository updates do not strand the installer.
 WLR_ABI=""
 WLR_PROVIDER=""
 
@@ -192,7 +203,8 @@ if [ -z "$WLR_ABI" ]; then
     candidate="${spec#*:}"
     if repo_has_pkg "$candidate"; then
       ver="$(repo_pkg_version "$candidate")"
-      if [ "$candidate" = "wlroots0.$(printf '%s' "$abi" | cut -d. -f2)" ] || version_is_wlroots_abi "$abi" "$ver"; then
+      if [ "$candidate" = "wlroots0.$(printf '%s' "$abi" | cut -d. -f2)" ] ||
+         version_is_wlroots_abi "$abi" "$ver"; then
         REQUIRED+=("$candidate")
         WLR_ABI="$abi"
         WLR_PROVIDER="$candidate $ver (repository)"
@@ -200,7 +212,8 @@ if [ -z "$WLR_ABI" ]; then
       fi
     elif installed_pkg "$candidate"; then
       ver="$(installed_pkg_version "$candidate")"
-      if [ "$candidate" = "wlroots0.$(printf '%s' "$abi" | cut -d. -f2)" ] || version_is_wlroots_abi "$abi" "$ver"; then
+      if [ "$candidate" = "wlroots0.$(printf '%s' "$abi" | cut -d. -f2)" ] ||
+         version_is_wlroots_abi "$abi" "$ver"; then
         WLR_ABI="$abi"
         WLR_PROVIDER="$candidate $ver (already installed outside current repos)"
         break
@@ -219,15 +232,11 @@ export SANE_WLROOTS_ABI="$WLR_ABI"
 printf 'wlroots provider: %s\n' "$WLR_PROVIDER"
 printf 'selected dwl line: %s\n' "$([ "$WLR_ABI" = 0.20 ] && printf '0.9' || printf '0.8')"
 
-# Optional quality-of-life packages: install only when present in enabled repos.
 OPTIONAL=(thunar-volman adwaita-cursors)
 for pkg in "${OPTIONAL[@]}"; do
   if repo_has_pkg "$pkg"; then REQUIRED+=("$pkg"); fi
 done
 
-# Preflight every target. If a package was installed locally/AUR and is no
-# longer visible in enabled repositories, keep using it instead of passing its
-# name to pacman and triggering "target not found".
 PACMAN_TARGETS=()
 MISSING=()
 for pkg in "${REQUIRED[@]}"; do
@@ -248,26 +257,23 @@ if [ "${#MISSING[@]}" -gt 0 ]; then
   else
     printf '\nArch normally needs [core] and [extra] enabled.\n' >&2
   fi
-  die "package preflight failed before making package changes"
+  die "package preflight failed before rice package changes"
 fi
 
-if [ "$SANE_FULL_UPGRADE" = 1 ]; then
-  sudo pacman -Syu --needed "${PACMAN_TARGETS[@]}"
-else
-  sudo pacman -S --needed "${PACMAN_TARGETS[@]}"
-fi
+sudo pacman -S --needed "${PACMAN_TARGETS[@]}"
 xdg-user-dirs-update || true
 
-# The package name is not what matters to the dwl build; the selected ABI is.
 if ! pkg-config --exists "wlroots-$WLR_ABI"; then
   die "packages installed, but pkg-config cannot find wlroots-$WLR_ABI"
 fi
 printf 'wlroots ABI ready: %s (%s)\n' "$WLR_ABI" "$(pkg-config --modversion "wlroots-$WLR_ABI")"
 
 if [ "$DISTRO" = artix ] && [ "$INIT" = openrc ]; then
-  sudo rc-update add dbus default 2>/dev/null || true
-  sudo rc-update add elogind boot 2>/dev/null || true
+  sudo rc-update add dbus default 2>/dev/null || warn "could not add dbus to OpenRC default runlevel"
+  sudo rc-update add elogind boot 2>/dev/null || warn "could not add elogind to OpenRC boot runlevel"
 fi
+
+bash "$ROOT/tools/system-safety.sh" post-install
 
 say "3/12 — install wallust"
 if ! command -v wallust >/dev/null 2>&1; then
@@ -290,6 +296,7 @@ sudo install -d -m 0755 /usr/local/lib/sane-rice /usr/local/share/sane-rice/fire
 sudo install -m 0755 "$ROOT/lib/semantic.py" /usr/local/lib/sane-rice/semantic.py
 sudo install -m 0755 "$ROOT/lib/thunar_layout.py" /usr/local/lib/sane-rice/thunar_layout.py
 sudo install -m 0755 "$ROOT/lib/firefox_setup.py" /usr/local/lib/sane-rice/firefox_setup.py
+sudo install -m 0755 "$ROOT/tools/system-safety.sh" /usr/local/lib/sane-rice/system-safety.sh
 sudo install -m 0644 "$ROOT/firefox/userChrome.css" /usr/local/share/sane-rice/firefox/userChrome.css
 sudo install -m 0644 "$ROOT/firefox/userContent.css" /usr/local/share/sane-rice/firefox/userContent.css
 for f in "$ROOT"/bin/*; do
@@ -305,7 +312,6 @@ printf '%s\n' "$HOME/Pictures/wallpapers/sane-current.jpg" > "$HOME/.config/dwl/
 printf '%s\n' "$SANE_MODE" > "$HOME/.config/sane/mode"
 chmod +x "$HOME/.config/dwl/start"
 
-# Prompt is local to the graphical rice, not SSH/TTY sessions.
 python3 - "$HOME/.bashrc" <<'PY'
 from pathlib import Path
 import re,sys
@@ -342,9 +348,12 @@ for mime in \
   image/png image/jpeg image/gif image/webp image/bmp image/tiff image/svg+xml \
   image/heif image/heic image/avif image/jxl \
   image/x-portable-pixmap image/x-portable-graymap image/x-portable-bitmap
- do xdg-mime default sane-image.desktop "$mime" || true; done
-for mime in video/mp4 video/x-matroska video/webm video/mpeg video/quicktime video/x-msvideo
- do xdg-mime default mpv.desktop "$mime" || true; done
+do
+  xdg-mime default sane-image.desktop "$mime" || true
+done
+for mime in video/mp4 video/x-matroska video/webm video/mpeg video/quicktime video/x-msvideo; do
+  xdg-mime default mpv.desktop "$mime" || true
+done
 xdg-mime default org.pwmt.zathura.desktop application/pdf || true
 
 say "8/12 — initialize and configure Firefox"
@@ -354,7 +363,6 @@ if ! find "$HOME/.config/mozilla/firefox" "$HOME/.mozilla/firefox" -type f -name
   timeout 25s firefox --headless --screenshot "$TMP_SHOT" about:blank >/dev/null 2>&1 || true
 fi
 
-# prefs.js is Firefox-owned. Stop Firefox before the one-time cleanup.
 pkill -TERM -x firefox 2>/dev/null || true
 for _ in $(seq 1 30); do
   pgrep -x firefox >/dev/null 2>&1 || break
@@ -367,17 +375,20 @@ else
 fi
 
 say "9/12 — install Wayland session and configure display manager"
-
 have_dm=0
 for dm in sddm gdm lightdm greetd; do
   command -v "$dm" >/dev/null 2>&1 && have_dm=1
- done
+done
+
 want_sddm=0
 case "$SANE_INSTALL_SDDM" in
   1|yes|true) want_sddm=1 ;;
   0|no|false) want_sddm=0 ;;
   auto) [ "$have_dm" -eq 0 ] && want_sddm=1 || true ;;
-  *) warn "unknown SANE_INSTALL_SDDM=$SANE_INSTALL_SDDM; using auto"; [ "$have_dm" -eq 0 ] && want_sddm=1 || true ;;
+  *)
+    warn "unknown SANE_INSTALL_SDDM=$SANE_INSTALL_SDDM; using auto"
+    [ "$have_dm" -eq 0 ] && want_sddm=1 || true
+    ;;
 esac
 
 if [ "$want_sddm" -eq 1 ]; then
@@ -388,17 +399,20 @@ if [ "$want_sddm" -eq 1 ]; then
   fi
 fi
 
-# Minimal Arch installations do not necessarily have this directory yet. A
-# display-manager package may create it, but the session is valid even when the
-# user intentionally installs with SANE_INSTALL_SDDM=no, so own the directory
-# creation explicitly instead of relying on another package's side effect.
 sudo install -d -m 0755 /usr/share/wayland-sessions
 sudo install -m 0644 "$ROOT/config/sane-dwl.desktop" /usr/share/wayland-sessions/sane-dwl.desktop
-sudo test -r /usr/share/wayland-sessions/sane-dwl.desktop || die "failed to install the Sane dwl Wayland session entry"
+sudo test -r /usr/share/wayland-sessions/sane-dwl.desktop ||
+  die "failed to install the Sane dwl Wayland session entry"
 
 if command -v sddm >/dev/null 2>&1; then
-  if [ "$INIT" = openrc ]; then sudo rc-update add sddm default 2>/dev/null || true; fi
-  if [ "$INIT" = systemd ]; then sudo systemctl enable sddm.service 2>/dev/null || true; fi
+  if [ "$INIT" = openrc ]; then
+    sudo rc-update add sddm default 2>/dev/null || warn "could not add SDDM to the OpenRC default runlevel"
+  fi
+  if [ "$INIT" = systemd ]; then
+    sudo systemctl enable sddm.service
+    systemctl show-environment >/dev/null 2>&1 ||
+      die "systemd stopped responding while enabling SDDM"
+  fi
 fi
 
 say "10/12 — generate initial palette and application chrome"
@@ -409,11 +423,15 @@ if ! pgrep -x firefox >/dev/null 2>&1; then
   python3 /usr/local/lib/sane-rice/firefox_setup.py apply /usr/local/share/sane-rice/firefox || true
 fi
 
-say "11/12 — validate desktop integration"
+say "11/12 — validate desktop and host integration"
 sane-image --self-test || true
 sane-image-status || true
 sane-firefox-status || true
 sane-doctor || true
+
+# This check is intentionally fatal. A rice installer must not print "finished"
+# when systemd/D-Bus, networking, kernel payloads or boot mounts are unhealthy.
+bash /usr/local/lib/sane-rice/system-safety.sh post-install
 
 say "12/12 — finished"
 cat <<EOF
@@ -428,6 +446,7 @@ Useful commands:
   sane-wallpaper
   sane-colors
   sane-doctor
+  sane-system-check
   sane-firefox-status
   sane-image-status
 
@@ -442,6 +461,10 @@ Default keys:
 
 Backup created at:
   $BACKUP
+
+The v1.0.7 host-safety checks passed. If the full upgrade replaced the running
+kernel, a reboot is expected; the installer verified the installed kernel
+payload and configured boot mounts before declaring success.
 
 If no display manager is enabled, start the session manually with:
   /usr/local/bin/dwl-session
