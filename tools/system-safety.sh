@@ -29,6 +29,7 @@ check_fstab_mounts() {
 
 check_systemd() {
   [ "${ID:-}" = arch ] || return 0
+  local expected_runtime
 
   [ "$(cat /proc/1/comm 2>/dev/null || true)" = systemd ] ||
     die "Arch detected but PID 1 is not systemd"
@@ -45,8 +46,14 @@ check_systemd() {
       die "the system D-Bus is not reachable"
   fi
 
+  systemctl is-active --quiet systemd-logind.service 2>/dev/null ||
+    die "systemd-logind is not active; refusing to mask a broken login/runtime session"
+
+  expected_runtime="/run/user/$(id -u)"
   [ -n "${XDG_RUNTIME_DIR:-}" ] ||
     die "XDG_RUNTIME_DIR is unset; logind/PAM user-session setup is not healthy"
+  [ "$XDG_RUNTIME_DIR" = "$expected_runtime" ] ||
+    die "XDG_RUNTIME_DIR is $XDG_RUNTIME_DIR, expected the pam_systemd runtime $expected_runtime"
   [ -d "$XDG_RUNTIME_DIR" ] ||
     die "XDG_RUNTIME_DIR points to a missing directory: $XDG_RUNTIME_DIR"
   [ -O "$XDG_RUNTIME_DIR" ] ||
