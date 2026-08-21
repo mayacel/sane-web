@@ -89,8 +89,60 @@ check_running_kernel() {
   say "running kernel modules: $running"
 }
 
+kernel_file_version() {
+  local image="$1"
+  command -v file >/dev/null 2>&1 || return 0
+  file -b "$image" 2>/dev/null |
+    sed -n 's/.*version \([^ ]*\).*/\1/p' |
+    head -n1
+}
+
+check_mkinitcpio_outputs() {
+  local pkg="$1" preset outputs path checked
+  preset="/etc/mkinitcpio.d/$pkg.preset"
+  [ -f "$preset" ] || {
+    warn "$preset does not exist; skipping mkinitcpio output verification for $pkg"
+    return 0
+  }
+
+  outputs="$(
+    bash -c '
+      set +u
+      source "$1"
+      declare -p PRESETS >/dev/null 2>&1 || exit 0
+      for p in "${PRESETS[@]}"; do
+        eval "img=\${${p}_image:-}"
+        eval "uki=\${${p}_uki:-}"
+        [ -n "$img" ] && printf "%s\\n" "$img"
+        [ -n "$uki" ] && printf "%s\\n" "$uki"
+      done
+    ' _ "$preset" 2>/dev/null || true
+  )"
+
+  checked=0
+  while IFS= read -r path; do
+    [ -n "$path" ] || continue
+    case "$path" in
+      /*)
+        checked=1
+        [ -f "$path" ] ||
+          die "$preset declares boot artifact $path, but that file is missing after the kernel transaction"
+        ;;
+      *)
+        warn "$preset declares relative boot artifact $path; existence cannot be verified reliably"
+        ;;
+    esac
+  done <<< "$outputs"
+
+  if [ "$checked" -eq 1 ]; then
+    say "$pkg mkinitcpio outputs: present"
+  else
+    warn "$preset exposed no absolute image/UKI output path to verify"
+  fi
+}
+
 check_kernel_payloads() {
-  local pkg modulever image imagever found
+  local pkg modulever package_image package_ver boot_image boot_ver found
   found=0
 
   for pkg in linux linux-lts linux-zen linux-hardened; do
@@ -107,25 +159,35 @@ check_kernel_payloads() {
     [ -d "/usr/lib/modules/$modulever" ] ||
       die "$pkg owns kernel $modulever but /usr/lib/modules/$modulever is missing"
 
-    image="/boot/vmlinuz-$pkg"
-    [ -f "$image" ] ||
-      die "$pkg is installed but $image is missing"
+    # Current Arch kernel packages keep their canonical kernel image in the
+    # module tree. /boot copies and UKIs are produced by mkinitcpio/kernel hooks
+    # and are not necessarily files owned directly by the kernel package.
+    package_image="/usr/lib/modules/$modulever/vmlinuz"
+    [ -f "$package_image" ] ||
+      die "$pkg is installed but its canonical kernel image $package_image is missing"
 
-    if command -v file >/dev/null 2>&1; then
-      imagever="$(
-        file -b "$image" 2>/dev/null |
-          sed -n 's/.*version \([^ ]*\).*/\1/p' |
-          head -n1
-      )"
-      if [ -n "$imagever" ] && [ "$imagever" != "$modulever" ]; then
-        die "$image contains kernel $imagever but installed modules are $modulever. /boot may not be the filesystem used at boot."
-      fi
+    package_ver="$(kernel_file_version "$package_image")"
+    if [ -n "$package_ver" ] && [ "$package_ver" != "$modulever" ]; then
+      die "$package_image contains kernel $package_ver but its module directory is $modulever"
     fi
 
-    say "$pkg boot payload: $modulever"
+    # Traditional mkinitcpio layouts still expose /boot/vmlinuz-<pkg>. If it is
+    # present, compare it with the newly installed module tree. UKI-only layouts
+    # legitimately omit this path, so absence alone is not an error.
+    boot_image="/boot/vmlinuz-$pkg"
+    if [ -f "$boot_image" ]; then
+      boot_ver="$(kernel_file_version "$boot_image")"
+      if [ -n "$boot_ver" ] && [ "$boot_ver" != "$modulever" ]; then
+        die "$boot_image contains kernel $boot_ver but installed modules are $modulever. /boot may not be the filesystem used at boot."
+      fi
+      say "$pkg traditional boot kernel: $modulever"
+    fi
+
+    check_mkinitcpio_outputs "$pkg"
+    say "$pkg installed kernel payload: $modulever"
   done
 
-  [ "$found" -eq 1 ] || warn "no standard Arch kernel package was detected; skipped kernel image/module comparison"
+  [ "$found" -eq 1 ] || warn "no standard Arch kernel package was detected; skipped kernel payload comparison"
 }
 
 check_systemd_boot() {
